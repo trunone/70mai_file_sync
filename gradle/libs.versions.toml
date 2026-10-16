@@ -12,8 +12,8 @@ activity = "1.13.0"
 constraintlayout = "2.2.1"
 commonsNet = "3.13.0"
 okhttp = "5.3.2"
-jsch = "0.1.55"
 lifecycle = "2.10.0"
+documentfile = "1.0.1"
 dokka = "2.2.0"
 
 [libraries]
@@ -28,8 +28,8 @@ androidx-constraintlayout = { group = "androidx.constraintlayout", name = "const
 commons-net = { group = "commons-net", name = "commons-net", version.ref = "commonsNet" }
 okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "serialization" }
-jsch = { group = "com.jcraft", name = "jsch", version.ref = "jsch" }
 androidx-lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtime-ktx", version.ref = "lifecycle" }
+androidx-documentfile = { group = "androidx.documentfile", name = "documentfile", version.ref = "documentfile" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

@@ -6,6 +6,7 @@ import android.app.NotificationManager
 import android.app.Service
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.net.Uri
 import android.os.Binder
 import android.os.Build
 import android.os.Handler
@@ -14,10 +15,12 @@ import android.os.Looper
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.edit
+import androidx.documentfile.provider.DocumentFile
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.concurrent.atomic.AtomicBoolean
 import java.io.File
 import java.util.Locale
@@ -32,21 +35,17 @@ data class ServiceStatus(
     val totalFilesDownloaded: Int,      /**< Total files saved to phone */
     val pendingCameraFiles: Int,        /**< Number of files remaining on camera */
     val lastDownloadDuration: String,   /**< Time taken for last download */
-    val lastUploadResult: String,       /**< Result of the last SFTP upload */
-    val totalFilesUploaded: Int,        /**< Total files backed up to SFTP */
-    val pendingSftpFiles: Int,          /**< Number of local files waiting for upload */
     val currentFileName: String,        /**< Name of the file currently being transferred */
     val currentSpeed: String,           /**< Current transfer speed (MB/s or KB/s) */
     val currentProgress: Int,           /**< Current file transfer progress percentage (0-100) */
 )
 
 /**
- * @brief Foreground service that orchestrates file transfers from Dashcam (HTTP) to Phone, and Phone to SFTP.
+ * @brief Foreground service that orchestrates file transfers from Dashcam (HTTP) to Local Storage.
  * 
- * It periodically checks for the camera Wi-Fi. If found, it downloads new files. 
- * If not found, it attempts to upload downloaded files to an SFTP server.
+ * It periodically checks for the camera Wi-Fi. If found, it downloads new files to the local directory or document tree.
  */
-class FileTransferService : Service(){
+class FileTransferService : Service() {
 
     companion object {
         var isServiceRunningInForeground = false
@@ -58,7 +57,6 @@ class FileTransferService : Service(){
 
     private lateinit var httpClient: HttpClient
     private lateinit var httpAuth: HttpAuthentication
-    private lateinit var sftpUpload: SftpUpload
 
     // Handler and Runnable for periodic execution
     private lateinit var handler: Handler
@@ -101,7 +99,6 @@ class FileTransferService : Service(){
     }
 
     private var pendingCameraFiles = 0
-    private var pendingSftpFiles = 0
     private var currentFileName = ""
     private var currentSpeed = ""
     private var currentProgress = 0
@@ -114,46 +111,55 @@ class FileTransferService : Service(){
         val dhcp = httpClient.dhcpServerIpAddress
         val camIp = httpClient.cameraIp
 
-        // 1. Try HTTP (Camera) first
+        // Try HTTP (Camera) if connected
         if (dhcp == camIp) {
             FileLogger.logToFile(this, "FileService", "Camera detected ($camIp). Starting HTTP cycle.")
-            runHttpCycle()
-            updateStatus(getString(R.string.msg_http_success), "SUCCESS")
-            pendingSftpFiles = 0 
-            return 
-        }
-
-        // 2. If not on camera network, try SFTP
-        FileLogger.logToFile(this, "FileService", "Starting SFTP backup...")
-        pendingCameraFiles = 0
-        try {
-            val filesToUpload = sftpUpload.getLocalFilesToUpload()
-            pendingSftpFiles = filesToUpload.size
-            
-            if (pendingSftpFiles > 0) {
-                filesToUpload.forEach { fileInfo ->
-                    val parentFolder = fileInfo.relativePath.substringAfterLast('/').ifEmpty { fileInfo.relativePath }
-                    currentFileName = "$parentFolder/${fileInfo.name}"
-                    resetSpeed()
-                    sftpUpload.uploadAndDeleteFile(fileInfo) { bytes, total ->
-                        updateSpeed(bytes)
-                        if (total > 0) {
-                            currentProgress = ((bytes * 100) / total).toInt()
-                        }
-                    }
-                    pendingSftpFiles--
-                }
-                currentFileName = ""
-                currentSpeed = ""
-                currentProgress = 0
-                updateStatus(null, null, getString(R.string.msg_sftp_success), "SUCCESS")
+            val success = runHttpCycle()
+            if (success) {
+                updateStatus(getString(R.string.msg_http_success), "SUCCESS")
             } else {
-                updateStatus(null, null, getString(R.string.msg_sftp_idle), "IDLE")
+                updateStatus(getString(R.string.msg_http_error), "ERROR")
+            }
+        } else {
+            FileLogger.logToFile(this, "FileService", "Camera network not detected.")
+            pendingCameraFiles = 0
+            updateStatus(getString(R.string.msg_camera_not_found), "IDLE")
+        }
+    }
+
+    private fun isLocalFileExisting(
+        customLocalPath: String?,
+        cleanPath: String,
+        fileName: String,
+        fileSizeString: String?
+    ): Boolean {
+        return try {
+            val expectedSize = fileSizeString?.toLongOrNull()
+            if (!customLocalPath.isNullOrEmpty() && customLocalPath.startsWith("content://")) {
+                val treeUri = Uri.parse(customLocalPath)
+                val rootDoc = DocumentFile.fromTreeUri(this, treeUri) ?: return false
+                var currentDir = rootDoc
+                val subFolders = cleanPath.split('/').filter { it.isNotEmpty() }
+                for (folderName in subFolders) {
+                    val existing = currentDir.findFile(folderName) ?: return false
+                    if (!existing.isDirectory) return false
+                    currentDir = existing
+                }
+                val targetFile = currentDir.findFile(fileName)
+                targetFile != null && targetFile.exists() && targetFile.length() > 0 &&
+                        (expectedSize == null || expectedSize <= 0 || targetFile.length() == expectedSize)
+            } else {
+                val localDirFile = if (!customLocalPath.isNullOrEmpty()) {
+                    File(customLocalPath, cleanPath)
+                } else {
+                    File(getExternalFilesDir(null), "camera/$cleanPath")
+                }
+                val localFile = File(localDirFile, fileName)
+                localFile.exists() && localFile.length() > 0 &&
+                        (expectedSize == null || expectedSize <= 0 || localFile.length() == expectedSize)
             }
         } catch (e: Exception) {
-            FileLogger.logToFile(this, "FileService", "SFTP error: ${e.message}")
-            Log.e("FileService", "SFTP error: ${e.message}")
-            updateStatus(null, null, getString(R.string.msg_sftp_success), "ERROR")
+            false
         }
     }
 
@@ -214,6 +220,11 @@ class FileTransferService : Service(){
             it.name.replace(Regex("[FB]\\.(MP4|thm|jpg|JPG)$", RegexOption.IGNORE_CASE), "")
         }
 
+        val prefs = getSharedPreferences("FtpSettings", MODE_PRIVATE)
+        val customLocalPath = prefs.getString("PATH_LOCAL", null)?.ifBlank {
+            prefs.getString("PATH_SERVER", null)?.ifBlank { null }
+        }
+
         for ((groupKey, filesInGroup) in groupedFiles) {
             FileLogger.logToFile(this, "FileService", "Processing group $groupKey with files: ${filesInGroup.joinToString { it.name }}")
             
@@ -221,48 +232,64 @@ class FileTransferService : Service(){
             var networkErrorOccurred = false
 
             for (file in filesInGroup) {
-                FileLogger.logToFile(this, "FileService", "Downloading ${file.name} (Path: ${file.path})")
+                FileLogger.logToFile(this, "FileService", "Checking ${file.name} (Path: ${file.path})")
                 val parentFolder = file.path.substringAfterLast('/').ifEmpty { file.path }
                 currentFileName = "$parentFolder/${file.name}"
+
+                // Remove /mnt/sd for local path
+                val cleanPath = file.path.removePrefix("/mnt/sd").trimStart('/')
+
+                // Check if file already exists locally
+                if (isLocalFileExisting(customLocalPath, cleanPath, file.name, file.size)) {
+                    FileLogger.logToFile(this, "FileService", "File ${file.name} already exists locally. Skipping download.")
+                    Log.i("FileService", "File ${file.name} already exists locally. Skipping download.")
+                    successfullyDownloadedFiles.add(file)
+                    continue
+                }
+
                 resetSpeed()
                 
                 // Construct URL
                 val downloadUrl = "http://${httpClient.cameraIp}${file.path}/${file.name}"
                 
-                // Remove /mnt/sd for local path
-                val cleanPath = file.path.removePrefix("/mnt/sd").trimStart('/')
-                val localDirFile = File(getExternalFilesDir(null), "camera/$cleanPath")
-                if (!localDirFile.exists()) localDirFile.mkdirs()
-                
-                val localPath = localDirFile.absolutePath
-                
                 httpClient.registerClient()
                 val startTime = System.currentTimeMillis()
                 
                 try {
-                    val isDownloaded = httpClient.downloadFile(downloadUrl, localPath) { bytes, total ->
-                        updateSpeed(bytes)
-                        if (total > 0) {
-                            currentProgress = ((bytes * 100) / total).toInt()
+                    val isDownloaded = if (!customLocalPath.isNullOrEmpty() && customLocalPath.startsWith("content://")) {
+                        downloadFileToDocumentTree(downloadUrl, customLocalPath, cleanPath, file.name) { bytes, total ->
+                            updateSpeed(bytes)
+                            if (total > 0) {
+                                currentProgress = ((bytes * 100) / total).toInt()
+                            }
+                        }
+                    } else {
+                        val localDirFile = if (!customLocalPath.isNullOrEmpty()) {
+                            File(customLocalPath, cleanPath)
+                        } else {
+                            File(getExternalFilesDir(null), "camera/$cleanPath")
+                        }
+                        if (!localDirFile.exists()) localDirFile.mkdirs()
+                        val localPath = localDirFile.absolutePath
+
+                        httpClient.downloadFile(downloadUrl, localPath) { bytes, total ->
+                            updateSpeed(bytes)
+                            if (total > 0) {
+                                currentProgress = ((bytes * 100) / total).toInt()
+                            }
                         }
                     }
                     
                     val endTime = System.currentTimeMillis()
                     
                     if (isDownloaded) {
-                        val downloadedFile = File(localDirFile, file.name)
-                        if (downloadedFile.exists() && (downloadedFile.length() > 0)) {
-                            Log.i("FileService", "Successfully downloaded: ${file.name}")
-                            val duration = (endTime - startTime) / 1000.0
-                            saveDownloadDuration(duration)
-                            incrementDownloadCount()
-                            successfullyDownloadedFiles.add(file)
-                        } else {
-                            Log.e("FileService", "File ${file.name} is 0 bytes or missing.")
-                        }
+                        Log.i("FileService", "Successfully downloaded: ${file.name}")
+                        val duration = (endTime - startTime) / 1000.0
+                        saveDownloadDuration(duration)
+                        incrementDownloadCount()
+                        successfullyDownloadedFiles.add(file)
                     } else {
                         Log.e("FileService", "Error downloading ${file.name}. Group incomplete.")
-                        // If it failed but not necessarily a network drop, we still skip the group
                     }
                 } catch (e: Exception) {
                     FileLogger.logToFile(this, "FileService", "Critical download error: ${e.message}")
@@ -276,9 +303,9 @@ class FileTransferService : Service(){
                 break // Stop all groups
             }
 
-            // Only delete the group if ALL files in the group were successfully downloaded
+            // Only delete the group if ALL files in the group were successfully downloaded / already exist locally
             if (successfullyDownloadedFiles.size == filesInGroup.size) {
-                FileLogger.logToFile(this, "FileService", "Group $groupKey downloaded successfully. Deleting from camera...")
+                FileLogger.logToFile(this, "FileService", "Group $groupKey downloaded/verified successfully. Deleting from camera...")
                 for (file in successfullyDownloadedFiles) {
                     httpClient.registerClient()
                     val deleted = httpClient.deleteRemoteFile(file.path, file.name, token)
@@ -300,6 +327,85 @@ class FileTransferService : Service(){
         currentProgress = 0
         
         return true
+    }
+
+    private suspend fun downloadFileToDocumentTree(
+        url: String,
+        treeUriString: String,
+        cleanSubPath: String,
+        fileName: String,
+        onProgress: ((Long, Long) -> Unit)? = null
+    ): Boolean {
+        return withContext(Dispatchers.IO) {
+            try {
+                val treeUri = Uri.parse(treeUriString)
+                val rootDoc = DocumentFile.fromTreeUri(this@FileTransferService, treeUri)
+                    ?: return@withContext false
+
+                if (!rootDoc.canWrite()) {
+                    FileLogger.logToFile(this@FileTransferService, "FileService", "Cannot write to selected folder Uri.")
+                    return@withContext false
+                }
+
+                var currentDir = rootDoc
+                val subFolders = cleanSubPath.split('/').filter { it.isNotEmpty() }
+                for (folderName in subFolders) {
+                    val existing = currentDir.findFile(folderName)
+                    currentDir = if (existing != null && existing.isDirectory) {
+                        existing
+                    } else {
+                        currentDir.createDirectory(folderName) ?: return@withContext false
+                    }
+                }
+
+                var targetDoc = currentDir.findFile(fileName)
+                if (targetDoc == null) {
+                    val mimeType = when {
+                        fileName.endsWith(".mp4", ignoreCase = true) -> "video/mp4"
+                        fileName.endsWith(".jpg", ignoreCase = true) || fileName.endsWith(".jpeg", ignoreCase = true) -> "image/jpeg"
+                        else -> "application/octet-stream"
+                    }
+                    targetDoc = currentDir.createFile(mimeType, fileName) ?: return@withContext false
+                }
+
+                val request = okhttp3.Request.Builder().url(url).build()
+                val activeClient = httpClient.getOkHttpClientForUrl(url)
+                val response = activeClient.newCall(request).execute()
+
+                if (!response.isSuccessful) {
+                    response.close()
+                    return@withContext false
+                }
+
+                val body = response.body ?: run {
+                    response.close()
+                    return@withContext false
+                }
+
+                val totalBytes = body.contentLength()
+                var bytesDownloaded = 0L
+
+                body.use { responseBody ->
+                    responseBody.byteStream().use { inputStream ->
+                        contentResolver.openOutputStream(targetDoc.uri)?.use { outputStream ->
+                            val buffer = ByteArray(65536)
+                            var bytesRead: Int
+                            while (inputStream.read(buffer).also { bytesRead = it } != -1) {
+                                outputStream.write(buffer, 0, bytesRead)
+                                bytesDownloaded += bytesRead
+                                onProgress?.invoke(bytesDownloaded, totalBytes)
+                            }
+                        } ?: return@withContext false
+                    }
+                }
+
+                return@withContext bytesDownloaded > 0
+            } catch (e: Exception) {
+                FileLogger.logToFile(this@FileTransferService, "FileService", "DocumentTree download error: ${e.message}")
+                e.printStackTrace()
+                false
+            }
+        }
     }
 
     private fun resetSpeed() {
@@ -345,13 +451,11 @@ class FileTransferService : Service(){
         }
     }
 
-    private fun updateStatus(dlStatus: String?, dlRes: String?, upStatus: String? = null, upRes: String? = null) {
+    private fun updateStatus(dlStatus: String?, dlRes: String?) {
         val prefs = getSharedPreferences("FtpStats", MODE_PRIVATE)
         prefs.edit {
             dlStatus?.let { putString("FTP_STATUS", it) }
             dlRes?.let { putString("FTP_RESULT", it) }
-            upStatus?.let { putString("SFTP_STATUS", it) }
-            upRes?.let { putString("SFTP_RESULT", it) }
         }
     }
 
@@ -370,7 +474,6 @@ class FileTransferService : Service(){
 
         httpClient = HttpClient(this)
         httpAuth = HttpAuthentication(httpClient)
-        sftpUpload = SftpUpload(this)
     }
 
     fun stopTransfer() {
@@ -380,7 +483,7 @@ class FileTransferService : Service(){
         isTaskRunning.set(false)
         nextExecutionTime = 0L
 
-        //Zeroes statistics
+        // Zeroes statistics
         currentFileName = ""
         currentSpeed = ""
 
@@ -438,8 +541,6 @@ class FileTransferService : Service(){
         return START_STICKY
     }
 
-
-
     private fun createNotificationChannel() {
         val serviceChannel = NotificationChannel("FileTransferChannel", "File Transfer Service", NotificationManager.IMPORTANCE_DEFAULT)
         val manager = getSystemService(NotificationManager::class.java)
@@ -477,11 +578,9 @@ class FileTransferService : Service(){
         }
         val statsPrefs = getSharedPreferences("FtpStats", MODE_PRIVATE)
         val totalDownloads = statsPrefs.getInt("TOTAL_DOWNLOADS", 0)
-        val totalUploads = statsPrefs.getInt("TOTAL_UPLOADS", 0)
         val lastDuration = statsPrefs.getString("LAST_DOWNLOAD_DURATION", "0 sec.") ?: "0 sec."
 
-        val lastDownloadResult = statsPrefs.getString("FTP_STATUS", null)?: "Waiting for FTP"
-        val lastUploadResult = statsPrefs.getString("SFTP_STATUS", null)?: "Waiting for SFTP"
+        val lastDownloadResult = statsPrefs.getString("FTP_STATUS", null) ?: getString(R.string.status_idle)
 
         return ServiceStatus(
             generalStatus, 
@@ -489,9 +588,6 @@ class FileTransferService : Service(){
             totalDownloads, 
             pendingCameraFiles,
             lastDuration, 
-            lastUploadResult, 
-            totalUploads,
-            pendingSftpFiles,
             currentFileName,
             currentSpeed,
             currentProgress

@@ -18,31 +18,36 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.view.Menu
+import android.view.MenuItem
 import android.view.View
 import android.view.WindowManager
-import android.widget.AdapterView
-import android.widget.ArrayAdapter
+import android.widget.EditText
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.edit
-import androidx.core.os.LocaleListCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
+import androidx.recyclerview.widget.LinearLayoutManager
 import com.google.android.material.tabs.TabLayout
 import com.lz1bgb.camhttp.databinding.ActivitySettingsBinding
+import com.lz1bgb.camhttp.databinding.DialogSettingsBinding
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
- * @brief Main UI activity for configuring camera settings and monitoring transfer progress.
+ * @brief Main UI activity managing transfer controls and remote file viewer.
  */
 class SettingsActivity : AppCompatActivity() {
     private lateinit var binding: ActivitySettingsBinding
     private lateinit var httpClient: HttpClient
+    private lateinit var remoteFilesAdapter: RemoteFilesAdapter
     
     private var fileTransferService: FileTransferService? = null
     private var isBound = false
@@ -51,6 +56,7 @@ class SettingsActivity : AppCompatActivity() {
     private var isAlbumActive = false
     
     private var manualServiceState: Boolean? = null
+    private var activeDialogBinding: DialogSettingsBinding? = null
 
     private val isServiceRunning: Boolean
         get() {
@@ -62,7 +68,6 @@ class SettingsActivity : AppCompatActivity() {
 
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
-            // Take service instance via  Binder-а
             val binder = service as FileTransferService.LocalBinder
             fileTransferService = binder.getService()
             isBound = true
@@ -85,6 +90,24 @@ class SettingsActivity : AppCompatActivity() {
             Toast.makeText(this, "Location permission is required for Wi-Fi", Toast.LENGTH_LONG).show()
         }
     }
+
+    private val openDocumentTreeLauncher = registerForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        if (uri != null) {
+            val takeFlags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            try {
+                contentResolver.takePersistableUriPermission(uri, takeFlags)
+            } catch (e: Exception) {
+                FileLogger.logToFile(this, "SettingsActivity", "Failed to take persistable Uri permission: ${e.message}")
+            }
+            activeDialogBinding?.dialogBackupPathTxt?.setText(uri.toString())
+            getSharedPreferences("FtpSettings", MODE_PRIVATE).edit {
+                putString("PATH_LOCAL", uri.toString())
+            }
+            Toast.makeText(this, "Folder selected", Toast.LENGTH_SHORT).show()
+        }
+    }
     
     private val updateTask = object : Runnable {
         override fun run() {
@@ -92,7 +115,6 @@ class SettingsActivity : AppCompatActivity() {
             handler.postDelayed(this, 5000) 
         }
     }
-
 
     fun activateKeepScreenOn() {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -122,6 +144,63 @@ class SettingsActivity : AppCompatActivity() {
         }
     }
 
+    override fun onCreateOptionsMenu(menu: Menu?): Boolean {
+        menuInflater.inflate(R.menu.main_menu, menu)
+        return true
+    }
+
+    override fun onOptionsItemSelected(item: MenuItem): Boolean {
+        return when (item.itemId) {
+            R.id.action_settings -> {
+                showSettingsDialog()
+                true
+            }
+            R.id.action_refresh -> {
+                fetchRemoteFiles()
+                true
+            }
+            else -> super.onOptionsItemSelected(item)
+        }
+    }
+
+    private fun showSettingsDialog() {
+        val dialogBinding = DialogSettingsBinding.inflate(layoutInflater)
+        activeDialogBinding = dialogBinding
+
+        val prefs = getSharedPreferences("FtpSettings", MODE_PRIVATE)
+        dialogBinding.dialogCamIPTxt.setText(prefs.getString("IP_CAM", "192.168.0.1"))
+        dialogBinding.dialogCamSSIDTxt.setText(prefs.getString("SSID_CAM", ""))
+        dialogBinding.dialogCamWifiPassTxt.setText(prefs.getString("PASS_WIFI_CAM", ""))
+
+        val savedLocalPath = prefs.getString("PATH_LOCAL", null) ?: prefs.getString("PATH_SERVER", "")
+        dialogBinding.dialogBackupPathTxt.setText(savedLocalPath)
+
+        dialogBinding.dialogBrowseFolderButton.setOnClickListener {
+            openDocumentTreeLauncher.launch(null)
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle(R.string.menu_settings)
+            .setView(dialogBinding.root)
+            .setPositiveButton(R.string.btn_save) { _, _ ->
+                prefs.edit {
+                    putString("IP_CAM", dialogBinding.dialogCamIPTxt.text.toString())
+                    putString("SSID_CAM", dialogBinding.dialogCamSSIDTxt.text.toString())
+                    putString("PASS_WIFI_CAM", dialogBinding.dialogCamWifiPassTxt.text.toString())
+                    putString("PATH_LOCAL", dialogBinding.dialogBackupPathTxt.text.toString())
+                }
+                Toast.makeText(this, "Settings saved.", Toast.LENGTH_SHORT).show()
+                activeDialogBinding = null
+            }
+            .setNegativeButton(R.string.btn_cancel) { _, _ ->
+                activeDialogBinding = null
+            }
+            .setOnDismissListener {
+                activeDialogBinding = null
+            }
+            .show()
+    }
+
     private fun refreshServiceStatus() {
         if (fileTransferService == null || !isServiceRunning) {
             binding.statusTextView.text = getString(R.string.status_waiting_start)
@@ -137,9 +216,6 @@ class SettingsActivity : AppCompatActivity() {
             binding.totalFilesDownloadedTextView.text = getString(R.string.label_total_downloaded, status.totalFilesDownloaded)
             binding.lastDownloadDurationTextView.text = getString(R.string.label_last_duration, status.lastDownloadDuration)
             binding.pendingCameraFilesTextView.text = getString(R.string.label_pending_camera, status.pendingCameraFiles)
-            binding.lastUploadResultTextView.text = getString(R.string.label_last_upload, status.lastUploadResult)
-            binding.totalFilesUploadedTextView.text = getString(R.string.label_total_uploaded, status.totalFilesUploaded)
-            binding.pendingSftpFilesTextView.text = getString(R.string.label_pending_sftp, status.pendingSftpFiles)
             
             if (status.currentFileName.isNotEmpty()) {
                 binding.fileNameInProcess.text = getString(R.string.label_current_file, status.currentFileName)
@@ -159,9 +235,6 @@ class SettingsActivity : AppCompatActivity() {
             binding.totalFilesDownloadedTextView.visibility = View.VISIBLE
             binding.lastDownloadDurationTextView.visibility = View.VISIBLE
             binding.pendingCameraFilesTextView.visibility = View.VISIBLE
-            binding.lastUploadResultTextView.visibility = View.VISIBLE
-            binding.totalFilesUploadedTextView.visibility = View.VISIBLE
-            binding.pendingSftpFilesTextView.visibility = View.VISIBLE
         } else {
             updateStartStopButtonUI()
         }
@@ -183,7 +256,8 @@ class SettingsActivity : AppCompatActivity() {
         binding = ActivitySettingsBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        // Add manual padding to respect the status bar and navigation bar (Edge-to-Edge safety)
+        setSupportActionBar(binding.toolbar)
+
         ViewCompat.setOnApplyWindowInsetsListener(binding.main) { v, insets ->
             val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
             v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom)
@@ -191,71 +265,38 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         httpClient = HttpClient(this)
-        setupLanguageSpinner()
         setupTabs()
+        setupViewerRecyclerView()
 
-        // Bind to service if it's already running or to allow it to be created
         if (isServiceRunning) {
             Intent(this, FileTransferService::class.java).also { intent ->
                 bindService(intent, serviceConnection, BIND_AUTO_CREATE)
             }
         }
         
-        val prefs = getSharedPreferences("FtpSettings", MODE_PRIVATE)
         val statsPrefs = getSharedPreferences("FtpStats", MODE_PRIVATE)
-
-        binding.camIPTxt.setText(prefs.getString("IP_CAM", ""))
-        binding.camSSIDTxt.setText(prefs.getString("SSID_CAM", ""))
-        binding.camWifiPassTxt.setText(prefs.getString("PASS_WIFI_CAM", ""))
-        
-        binding.backupIPTxt.setText(prefs.getString("IP_SERVER", ""))
-        binding.backupUserTxt.setText(prefs.getString("USER_SERVER", ""))
-        binding.backupPassTxt.setText(prefs.getString("PASS_SERVER", ""))
-        binding.backupPathTxt.setText(prefs.getString("PATH_SERVER", ""))
 
         // Display initial counters
         val initialTotalDownloads = statsPrefs.getInt("TOTAL_DOWNLOADS", 0)
         binding.totalFilesDownloadedTextView.text = getString(R.string.label_total_downloaded, initialTotalDownloads)
         binding.totalFilesDownloadedTextView.visibility = View.VISIBLE
 
-        val initialTotalUploads = statsPrefs.getInt("TOTAL_UPLOADS", 0)
-        binding.totalFilesUploadedTextView.text = getString(R.string.label_total_uploaded, initialTotalUploads)
-        binding.totalFilesUploadedTextView.visibility = View.VISIBLE
-
-        /**
-         * Toggle button logic for Start/Stop
-         */
         binding.startStopButton.setOnClickListener {
             val serviceIntent = Intent(this, FileTransferService::class.java)
             if (!isServiceRunning) {
-                // START
                 manualServiceState = true
-                prefs.edit {
-                    putString("IP_CAM", binding.camIPTxt.text.toString())
-                    putString("SSID_CAM", binding.camSSIDTxt.text.toString())
-                    putString("PASS_WIFI_CAM", binding.camWifiPassTxt.text.toString())
-                    putString("IP_SERVER", binding.backupIPTxt.text.toString())
-                    putString("USER_SERVER", binding.backupUserTxt.text.toString())
-                    putString("PASS_SERVER", binding.backupPassTxt.text.toString())
-                    putString("PATH_SERVER", binding.backupPathTxt.text.toString())
-                }
-
                 startForegroundService(serviceIntent)
                 bindService(serviceIntent, serviceConnection, Context.BIND_AUTO_CREATE)
                 Toast.makeText(this, "Service Started.", Toast.LENGTH_SHORT).show()
             } else {
-                // STOP
                 manualServiceState = false
                 if (isBound && fileTransferService != null) {
                     fileTransferService!!.stopTransfer()
-
                     try {
                         unbindService(serviceConnection)
                     } catch (e: Exception) {
                         FileLogger.logToFile(this@SettingsActivity,"Activity", "Unbind error: ${e.message}")
-
                     }
-
                     isBound = false
                     fileTransferService = null
                 }
@@ -270,14 +311,11 @@ class SettingsActivity : AppCompatActivity() {
             val sp = getSharedPreferences("FtpStats", MODE_PRIVATE)
             sp.edit {
                 putInt("TOTAL_DOWNLOADS", 0)
-                putInt("TOTAL_UPLOADS", 0)
                 putString("FTP_STATUS", getString(R.string.status_idle))
-                putString("SFTP_STATUS", getString(R.string.status_idle))
                 putString("LAST_DOWNLOAD_DURATION", "0 sec.")
             }
             binding.totalFilesDownloadedTextView.text = getString(R.string.label_total_downloaded, 0)
             binding.lastDownloadDurationTextView.text = getString(R.string.label_last_duration, "0 sec.")
-            binding.totalFilesUploadedTextView.text = getString(R.string.label_total_uploaded, 0)
             Toast.makeText(this, "Stats Reset.", Toast.LENGTH_SHORT).show()
         }
 
@@ -325,28 +363,137 @@ class SettingsActivity : AppCompatActivity() {
             if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
                 requestPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
             } else {
-                val permissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.NEARBY_WIFI_DEVICES)
-                } else {
-                    arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
-                }
                 connectToWifi()
             }
         }
 
         binding.sleepButton.setOnClickListener {
             isModeActive = !isModeActive
-            if(isModeActive){
+            if (isModeActive) {
                 activateKeepScreenOn()
                 binding.sleepButton.setBackgroundColor(ContextCompat.getColor(this, android.R.color.holo_red_dark))
                 binding.sleepButton.setTextColor(Color.WHITE)
                 Toast.makeText(this, "Keep Screen On: ACTIVE", Toast.LENGTH_SHORT).show()
-            }else{
+            } else {
                 deactivateKeepScreenOn()
                 binding.sleepButton.setBackgroundColor(Color.TRANSPARENT)
                 binding.sleepButton.setTextColor(ContextCompat.getColor(this, R.color.white))
                 Toast.makeText(this, "Keep Screen On: OFF", Toast.LENGTH_SHORT).show()
             }
+        }
+    }
+
+    private fun setupViewerRecyclerView() {
+        remoteFilesAdapter = RemoteFilesAdapter { selectedCount ->
+            binding.btnDeleteSelected.text = getString(R.string.btn_delete_selected, selectedCount)
+            binding.btnSelectAll.text = if (remoteFilesAdapter.isAllSelected()) {
+                getString(R.string.btn_deselect_all)
+            } else {
+                getString(R.string.btn_select_all)
+            }
+        }
+        binding.remoteFilesRecyclerView.layoutManager = LinearLayoutManager(this)
+        binding.remoteFilesRecyclerView.adapter = remoteFilesAdapter
+
+        binding.btnSelectAll.setOnClickListener {
+            if (remoteFilesAdapter.isAllSelected()) {
+                remoteFilesAdapter.deselectAll()
+            } else {
+                remoteFilesAdapter.selectAll()
+            }
+        }
+
+        binding.btnDeleteSelected.setOnClickListener {
+            val selectedFiles = remoteFilesAdapter.getSelectedFiles()
+            if (selectedFiles.isEmpty()) {
+                Toast.makeText(this, "No files selected.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+
+            AlertDialog.Builder(this)
+                .setTitle(R.string.btn_delete)
+                .setMessage(getString(R.string.msg_confirm_delete, selectedFiles.size))
+                .setPositiveButton(R.string.btn_delete) { _, _ ->
+                    performBatchDelete(selectedFiles)
+                }
+                .setNegativeButton(R.string.btn_cancel, null)
+                .show()
+        }
+    }
+
+    private fun fetchRemoteFiles() {
+        binding.viewerProgressBar.visibility = View.VISIBLE
+        binding.emptyViewerTextView.visibility = View.GONE
+        binding.remoteFilesRecyclerView.visibility = View.GONE
+
+        lifecycleScope.launch {
+            httpClient.updateNetworkInfo()
+            val token = httpClient.sessionToken
+
+            if (token == null) {
+                binding.viewerProgressBar.visibility = View.GONE
+                binding.emptyViewerTextView.text = getString(R.string.msg_no_remote_files)
+                binding.emptyViewerTextView.visibility = View.VISIBLE
+                return@launch
+            }
+
+            val fileTypes = listOf(0, 8, 1, 6, 2, 3)
+            val allFiles = mutableListOf<FileInfo>()
+
+            withContext(Dispatchers.IO) {
+                for (type in fileTypes) {
+                    httpClient.registerClient()
+                    val files = httpClient.getFileList(type)
+                    if (files != null) {
+                        allFiles.addAll(files)
+                    }
+                }
+            }
+
+            binding.viewerProgressBar.visibility = View.GONE
+
+            if (allFiles.isEmpty()) {
+                binding.emptyViewerTextView.text = getString(R.string.msg_no_remote_files)
+                binding.emptyViewerTextView.visibility = View.VISIBLE
+                binding.remoteFilesRecyclerView.visibility = View.GONE
+            } else {
+                val uniqueFiles = allFiles.distinctBy { "${it.path}/${it.name}" }.sortedByDescending { it.name }
+                remoteFilesAdapter.submitList(uniqueFiles)
+                binding.emptyViewerTextView.visibility = View.GONE
+                binding.remoteFilesRecyclerView.visibility = View.VISIBLE
+            }
+        }
+    }
+
+    private fun performBatchDelete(filesToDelete: List<FileInfo>) {
+        binding.viewerProgressBar.visibility = View.VISIBLE
+        lifecycleScope.launch {
+            val token = httpClient.sessionToken
+            if (token == null) {
+                binding.viewerProgressBar.visibility = View.GONE
+                Toast.makeText(this@SettingsActivity, "Authentication required.", Toast.LENGTH_SHORT).show()
+                return@launch
+            }
+
+            var successCount = 0
+            withContext(Dispatchers.IO) {
+                for (file in filesToDelete) {
+                    httpClient.registerClient()
+                    val deleted = httpClient.deleteRemoteFile(file.path, file.name, token)
+                    if (deleted) {
+                        successCount++
+                    }
+                }
+            }
+
+            binding.viewerProgressBar.visibility = View.GONE
+            Toast.makeText(
+                this@SettingsActivity,
+                "Deleted $successCount / ${filesToDelete.size} file(s).",
+                Toast.LENGTH_LONG
+            ).show()
+
+            fetchRemoteFiles()
         }
     }
 
@@ -356,11 +503,12 @@ class SettingsActivity : AppCompatActivity() {
                 when (tab?.position) {
                     0 -> {
                         binding.controlsLayout.visibility = View.VISIBLE
-                        binding.settingsLayout.visibility = View.GONE
+                        binding.viewerLayout.visibility = View.GONE
                     }
                     1 -> {
                         binding.controlsLayout.visibility = View.GONE
-                        binding.settingsLayout.visibility = View.VISIBLE
+                        binding.viewerLayout.visibility = View.VISIBLE
+                        fetchRemoteFiles()
                     }
                 }
             }
@@ -369,16 +517,18 @@ class SettingsActivity : AppCompatActivity() {
         })
     }
 
-
     private fun connectToWifi() {
-        val ssid = binding.camSSIDTxt.text.toString()
-        val pass = binding.camWifiPassTxt.text.toString()
+        val prefs = getSharedPreferences("FtpSettings", MODE_PRIVATE)
+        val ssid = prefs.getString("SSID_CAM", "") ?: ""
+        val pass = prefs.getString("PASS_WIFI_CAM", "") ?: ""
 
-        if (ssid.isEmpty()) return
+        if (ssid.isEmpty()) {
+            Toast.makeText(this, "Please set SSID in Settings.", Toast.LENGTH_SHORT).show()
+            return
+        }
 
         val connectivityManager = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
 
-        // Define the network
         val specifier = WifiNetworkSpecifier.Builder()
             .setSsid(ssid)
             .apply {
@@ -386,15 +536,13 @@ class SettingsActivity : AppCompatActivity() {
             }
             .build()
 
-        // Request to the system
         val request = NetworkRequest.Builder()
             .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
-            .removeCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) // Allows network without internet
+            .removeCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
             .setNetworkSpecifier(specifier)
             .build()
 
         try {
-            // This calls a system BottomSheet, WITHOUT leaving the application
             connectivityManager.requestNetwork(request, object : ConnectivityManager.NetworkCallback() {
                 override fun onAvailable(network: Network) {
                     super.onAvailable(network)
@@ -416,45 +564,6 @@ class SettingsActivity : AppCompatActivity() {
             Toast.makeText(this, "Searching for $ssid...", Toast.LENGTH_SHORT).show()
         } catch (e: Exception) {
             FileLogger.logToFile(this, "WifiError", "Error: ${e.message}")
-            // If an error is thrown here, the NEARBY_WIFI_DEVICES permission is likely missing
-        }
-    }
-
-    private fun setupLanguageSpinner() {
-        val languages = arrayOf("Български", "English", "Русский")
-        val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, languages)
-        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-        binding.languageSpinner.adapter = adapter
-
-        // Get current language from AppCompatDelegate
-        val currentLocales = AppCompatDelegate.getApplicationLocales()
-        val currentLang = if (!currentLocales.isEmpty) currentLocales.get(0)?.language ?: "bg" else "bg"
-        
-        val selection = when (currentLang) {
-            "bg" -> 0
-            "en" -> 1
-            "ru" -> 2
-            else -> 0
-        }
-        
-        binding.languageSpinner.setSelection(selection, false)
-
-        binding.languageSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
-                val langCode = when (position) {
-                    0 -> "bg"
-                    1 -> "en"
-                    2 -> "ru"
-                    else -> "bg"
-                }
-                
-                if (langCode != currentLang) {
-                    // Modern way to set application locales
-                    val appLocale: LocaleListCompat = LocaleListCompat.forLanguageTags(langCode)
-                    AppCompatDelegate.setApplicationLocales(appLocale)
-                }
-            }
-            override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
     }
 }
