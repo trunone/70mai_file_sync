@@ -351,7 +351,7 @@ class HttpClient(context: Context) {
                 val url = "http://$dhcp/cgi-bin/$queryPath$queryParams&-signkey=$sign"
                 val response = executeRequest(url)
                 
-                FileLogger.logToFile(appContext, "HttpClient", "Set album mode response: $response")
+                FileLogger.logToFile(appContext, "HttpClient", "Set album mode (enable=$enableValue) response: $response")
                 response?.contains("\"ResultCode\":0") == true || response?.contains("\"ResultCode\":\"0\"") == true
             } catch (e: Exception) {
                 FileLogger.logToFile(appContext, "HttpClient", "Delete remote file error: ${e.message}")
@@ -408,16 +408,78 @@ class HttpClient(context: Context) {
                 
                 while (true) {
                     val timestamp = System.currentTimeMillis() / 1000L
-                    val queryPath = "getfilelist.cgi?"
-                    val queryParams = "&-start=$startIndex&-end=${startIndex + pageSize - 1}&-type=$type&-timestamp=$timestamp"
-                    val sign = generateSignKey(queryPath + queryParams, token)
                     
+                    // Construct primary URL without leading '&' after '?'
+                    val queryPath = "getfilelist.cgi?"
+                    val queryParams = "-start=$startIndex&-end=${startIndex + pageSize - 1}&-type=$type&-timestamp=$timestamp"
+                    val sign = generateSignKey(queryPath + queryParams, token)
                     val url = "http://$dhcp/cgi-bin/$queryPath$queryParams&-signkey=$sign"
+                    
                     FileLogger.logToFile(appContext, "HttpClient", "Fetching file list: $url")
-                    val responseJson = executeRequest(url) ?: break
+                    var responseJson = executeRequest(url) ?: break
+                    FileLogger.logToFile(appContext, "HttpClient", "Get file list response (type $type): $responseJson")
 
-                    val apiResponse = json.decodeFromString<ApiResponse>(responseJson)
-                    val code = apiResponse.resultCode.toString().replace("\"", "")
+                    var apiResponse = try {
+                        json.decodeFromString<ApiResponse>(responseJson)
+                    } catch (e: Exception) {
+                        FileLogger.logToFile(appContext, "HttpClient", "JSON parse error (type $type): ${e.message}")
+                        break
+                    }
+                    var code = apiResponse.resultCode.toString().replace("\"", "")
+
+                    // If Result is empty on first page, try fallback query formats to ensure camera parameter compatibility
+                    if (code == "0" && apiResponse.result.isEmpty() && startIndex == 0) {
+                        val fallbackFormats = listOf(0, 1, 2, 3)
+                        for (format in fallbackFormats) {
+                            val altTimestamp = System.currentTimeMillis() / 1000L
+                            val altUrl = when (format) {
+                                0 -> {
+                                    // Format 0: Legacy URL format with leading & after ?
+                                    val qp = "&-start=0&-end=${pageSize - 1}&-type=$type&-timestamp=$altTimestamp"
+                                    val s = generateSignKey("getfilelist.cgi?" + qp, token)
+                                    "http://$dhcp/cgi-bin/getfilelist.cgi?$qp&-signkey=$s"
+                                }
+                                1 -> {
+                                    // Format 1: Without -type parameter
+                                    val qp = "-start=0&-end=${pageSize - 1}&-timestamp=$altTimestamp"
+                                    val s = generateSignKey("getfilelist.cgi?" + qp, token)
+                                    "http://$dhcp/cgi-bin/getfilelist.cgi?$qp&-signkey=$s"
+                                }
+                                2 -> {
+                                    // Format 2: Standard parameters without '-' prefix
+                                    val qp = "start=0&end=${pageSize - 1}&type=$type&timestamp=$altTimestamp"
+                                    val s = generateSignKey("getfilelist.cgi?" + qp, token)
+                                    "http://$dhcp/cgi-bin/getfilelist.cgi?$qp&signkey=$s"
+                                }
+                                3 -> {
+                                    // Format 3: 1-indexed pagination
+                                    val qp = "-start=1&-end=$pageSize&-type=$type&-timestamp=$altTimestamp"
+                                    val s = generateSignKey("getfilelist.cgi?" + qp, token)
+                                    "http://$dhcp/cgi-bin/getfilelist.cgi?$qp&-signkey=$s"
+                                }
+                                else -> continue
+                            }
+
+                            FileLogger.logToFile(appContext, "HttpClient", "Trying fallback query format $format: $altUrl")
+                            val altResponseJson = executeRequest(altUrl) ?: continue
+                            FileLogger.logToFile(appContext, "HttpClient", "Fallback format $format response: $altResponseJson")
+
+                            try {
+                                val altApiResponse = json.decodeFromString<ApiResponse>(altResponseJson)
+                                val altCode = altApiResponse.resultCode.toString().replace("\"", "")
+                                if (altCode == "0" && altApiResponse.result.isNotEmpty()) {
+                                    FileLogger.logToFile(appContext, "HttpClient", "Fallback format $format SUCCEEDED! Found ${altApiResponse.result.size} files.")
+                                    responseJson = altResponseJson
+                                    apiResponse = altApiResponse
+                                    code = altCode
+                                    break
+                                }
+                            } catch (e: Exception) {
+                                // Continue trying next format
+                            }
+                        }
+                    }
+
                     if (code == "0") {
                         val batch = apiResponse.result
                         if (batch.isEmpty()) break
@@ -453,19 +515,39 @@ class HttpClient(context: Context) {
         return withContext(Dispatchers.IO) {
             try {
                 val dhcp = dhcpServerIpAddress ?: cameraIp
-                val timestamp = System.currentTimeMillis() / 1000L
                 
-                val queryPath = "delete.cgi?"
-                val queryParams = "&-path=$path&-name=$name&-timestamp=$timestamp"
-                
-                val sign = generateSignKey(queryPath + queryParams, token)
-                
-                val url = "http://$dhcp/cgi-bin/$queryPath$queryParams&-signkey=$sign"
-                val responseJson = executeRequest(url)
+                // Formats to test for path parameter
+                val pathCandidates = listOf(
+                    path, // Raw path as returned by camera (e.g. "sd/Normal/Front")
+                    if (path.startsWith("/")) path else "/$path", // Leading slash "/sd/Normal/Front"
+                    path.removePrefix("/"), // No leading slash "sd/Normal/Front"
+                    if (path.startsWith("/mnt/")) path else "/mnt/${path.removePrefix("/")}", // "/mnt/sd/Normal/Front"
+                    if (path.endsWith("/")) path else "$path/" // Trailing slash
+                ).distinct()
 
-                responseJson != null && responseJson.contains("\"ResultCode\":\"0\"")
+                for (p in pathCandidates) {
+                    val timestamp = System.currentTimeMillis() / 1000L
+                    val queryPath = "delete.cgi?"
+                    val queryParams = "-path=$p&-name=$name&-timestamp=$timestamp"
+                    val sign = generateSignKey(queryPath + queryParams, token)
+                    val url = "http://$dhcp/cgi-bin/$queryPath$queryParams&-signkey=$sign"
+                    
+                    FileLogger.logToFile(appContext, "HttpClient", "Deleting remote file ($p): $url")
+                    val responseJson = executeRequest(url)
+                    FileLogger.logToFile(appContext, "HttpClient", "Delete remote file response ($p): $responseJson")
+
+                    if (responseJson != null && (
+                        responseJson.contains("\"ResultCode\":\"0\"") || 
+                        responseJson.contains("\"ResultCode\":0") || 
+                        responseJson.contains("success")
+                    )) {
+                        return@withContext true
+                    }
+                }
+
+                false
             } catch (e: Exception) {
-                FileLogger.logToFile(appContext, "HttpClient", "Update FW error: ${e.message}")
+                FileLogger.logToFile(appContext, "HttpClient", "Delete remote file error: ${e.message}")
                 e.printStackTrace()
                 false
             }

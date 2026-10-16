@@ -173,160 +173,179 @@ class FileTransferService : Service() {
             if (!authSuccess) return false
             token = httpClient.sessionToken ?: return false
         } else {
-            // Register periodically for keep-alive
+            // Register once per sync cycle for keep-alive
             httpClient.registerClient()
         }
 
-        // 0: Front Normal, 8: Back Normal, 1: Front Emergency, 6: Back Emergency, 2: Parking, 3: Photo
-        val fileTypes = listOf(0, 8, 1, 6, 2, 3)
-        val allFiles = mutableListOf<FileInfo>()
+        var albumModeActive = false
+        try {
+            // Enable Album Mode to pause video recording and unlock full file list/access on SD card
+            albumModeActive = httpClient.setAlbumMode(true)
+            FileLogger.logToFile(this, "FileService", "Album Mode enabled: $albumModeActive")
 
-        for (type in fileTypes) {
-            // Register before each list request
-            httpClient.registerClient()
-            val files = httpClient.getFileList(type)
-            if (files != null) {
-                FileLogger.logToFile(this, "FileService", "Type $type: Found ${files.size} files.")
-                
-                // Remove last 2 files from video categories to ensure recording is finished
-                val typeFiles = if (type in listOf(0, 8, 1, 6, 2)) {
-                    if (files.size > 2) {
-                        files.sortedBy { it.name }.dropLast(2)
+            // Wait 2 seconds for camera hardware to pause recording and initialize album file index
+            kotlinx.coroutines.delay(2000)
+
+            // Scan all CGI category types (0 to 15)
+            val fileTypes = (0..15).toList()
+            val allFiles = mutableListOf<FileInfo>()
+
+            for (type in fileTypes) {
+                val files = httpClient.getFileList(type)
+                if (files != null) {
+                    FileLogger.logToFile(this, "FileService", "Type $type: Found ${files.size} files.")
+                    
+                    val typeFiles = if (type in listOf(0, 1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12)) {
+                        if (albumModeActive) {
+                            // Recording paused; all files are finalized and safe to download
+                            files
+                        } else if (files.size > 1) {
+                            // Fallback if album mode was inactive: exclude only the 1 latest active file
+                            files.sortedBy { it.name }.dropLast(1)
+                        } else {
+                            FileLogger.logToFile(this, "FileService", "Type $type has only 1 file and Album Mode is inactive. Waiting for finalization.")
+                            emptyList()
+                        }
                     } else {
-                        FileLogger.logToFile(this, "FileService", "Type $type has only ${files.size} files. Waiting for finalization.")
-                        emptyList()
+                        files // Photos, etc.
+                    }
+                    
+                    allFiles.addAll(typeFiles)
+                }
+            }
+
+            if (allFiles.isEmpty()) {
+                FileLogger.logToFile(this, "FileService", "No new ready files for download.")
+                return true
+            }
+
+            // Deduplicate files and sort by name
+            val uniqueFiles = allFiles.distinctBy { "${it.path}/${it.name}" }
+            val sortedFiles = uniqueFiles.sortedBy { it.name }
+            pendingCameraFiles = sortedFiles.size
+
+            // Group files by stripping the 70mai suffixes (F/B + extension)
+            // Example: NO20260513-055652-000046B.MP4 -> NO20260513-055652-000046
+            val groupedFiles = sortedFiles.groupBy { 
+                it.name.replace(Regex("[FB]\\.(MP4|thm|jpg|JPG)$", RegexOption.IGNORE_CASE), "")
+            }
+
+            val prefs = getSharedPreferences("FtpSettings", MODE_PRIVATE)
+            val customLocalPath = prefs.getString("PATH_LOCAL", null)?.ifBlank {
+                prefs.getString("PATH_SERVER", null)?.ifBlank { null }
+            }
+
+            for ((groupKey, filesInGroup) in groupedFiles) {
+                FileLogger.logToFile(this, "FileService", "Processing group $groupKey with files: ${filesInGroup.joinToString { it.name }}")
+                
+                val successfullyDownloadedFiles = mutableListOf<FileInfo>()
+                var networkErrorOccurred = false
+
+                for (file in filesInGroup) {
+                    FileLogger.logToFile(this, "FileService", "Checking ${file.name} (Path: ${file.path})")
+                    val parentFolder = file.path.substringAfterLast('/').ifEmpty { file.path }
+                    currentFileName = "$parentFolder/${file.name}"
+
+                    // Remove /mnt/sd or sd/ prefixes for local path
+                    val cleanPath = file.path
+                        .removePrefix("/mnt/sd")
+                        .removePrefix("mnt/sd")
+                        .removePrefix("/sd")
+                        .removePrefix("sd")
+                        .trimStart('/')
+
+                    // Check if file already exists locally
+                    if (isLocalFileExisting(customLocalPath, cleanPath, file.name, file.size)) {
+                        FileLogger.logToFile(this, "FileService", "File ${file.name} already exists locally. Skipping download.")
+                        Log.i("FileService", "File ${file.name} already exists locally. Skipping download.")
+                        successfullyDownloadedFiles.add(file)
+                        continue
+                    }
+
+                    resetSpeed()
+                    
+                    // Construct URL with guaranteed leading slash after camera IP
+                    val urlPath = if (file.path.startsWith("/")) file.path else "/${file.path}"
+                    val downloadUrl = "http://${httpClient.cameraIp}$urlPath/${file.name}"
+                    val startTime = System.currentTimeMillis()
+                    
+                    try {
+                        val isDownloaded = if (!customLocalPath.isNullOrEmpty() && customLocalPath.startsWith("content://")) {
+                            downloadFileToDocumentTree(downloadUrl, customLocalPath, cleanPath, file.name) { bytes, total ->
+                                updateSpeed(bytes)
+                                if (total > 0) {
+                                    currentProgress = ((bytes * 100) / total).toInt()
+                                }
+                            }
+                        } else {
+                            val localDirFile = if (!customLocalPath.isNullOrEmpty()) {
+                                File(customLocalPath, cleanPath)
+                            } else {
+                                File(getExternalFilesDir(null), "camera/$cleanPath")
+                            }
+                            if (!localDirFile.exists()) localDirFile.mkdirs()
+                            val localPath = localDirFile.absolutePath
+
+                            httpClient.downloadFile(downloadUrl, localPath) { bytes, total ->
+                                updateSpeed(bytes)
+                                if (total > 0) {
+                                    currentProgress = ((bytes * 100) / total).toInt()
+                                }
+                            }
+                        }
+                        
+                        val endTime = System.currentTimeMillis()
+                        
+                        if (isDownloaded) {
+                            Log.i("FileService", "Successfully downloaded: ${file.name}")
+                            val duration = (endTime - startTime) / 1000.0
+                            saveDownloadDuration(duration)
+                            incrementDownloadCount()
+                            successfullyDownloadedFiles.add(file)
+                        } else {
+                            Log.e("FileService", "Error downloading ${file.name}. Group incomplete.")
+                        }
+                    } catch (e: Exception) {
+                        FileLogger.logToFile(this, "FileService", "Critical download error: ${e.message}")
+                        networkErrorOccurred = true
+                        break // Stop processing this group
+                    }
+                }
+
+                if (networkErrorOccurred) {
+                    FileLogger.logToFile(this, "FileService", "Network error detected. Aborting cycle.")
+                    break // Stop all groups
+                }
+
+                // Only delete the group if ALL files in the group were successfully downloaded / already exist locally
+                if (successfullyDownloadedFiles.size == filesInGroup.size) {
+                    FileLogger.logToFile(this, "FileService", "Group $groupKey downloaded/verified successfully. Deleting from camera...")
+                    for (file in successfullyDownloadedFiles) {
+                        val deleted = httpClient.deleteRemoteFile(file.path, file.name, token)
+                        if (deleted) {
+                            FileLogger.logToFile(this, "FileService", "Deleted from camera: ${file.name}")
+                            if (pendingCameraFiles > 0) pendingCameraFiles--
+                        } else {
+                            Log.e("FileService", "Failed to delete ${file.name} from camera.")
+                        }
                     }
                 } else {
-                    files // Photos etc.
+                    FileLogger.logToFile(this, "FileService", "Group $groupKey was NOT fully downloaded (Success: ${successfullyDownloadedFiles.size}/${filesInGroup.size}). Deletion skipped.")
+                    // Update pending count by removing processed group from the count to reflect UI correctly
+                    pendingCameraFiles -= filesInGroup.size
                 }
-                
-                allFiles.addAll(typeFiles)
             }
-        }
-
-        if (allFiles.isEmpty()) {
-            FileLogger.logToFile(this, "FileService", "No new ready files for download.")
-            return true
-        }
-
-        // Deduplicate files and sort by name
-        val uniqueFiles = allFiles.distinctBy { "${it.path}/${it.name}" }
-        val sortedFiles = uniqueFiles.sortedBy { it.name }
-        pendingCameraFiles = sortedFiles.size
-
-        // Group files by stripping the 70mai suffixes (F/B + extension)
-        // Example: NO20260513-055652-000046B.MP4 -> NO20260513-055652-000046
-        val groupedFiles = sortedFiles.groupBy { 
-            it.name.replace(Regex("[FB]\\.(MP4|thm|jpg|JPG)$", RegexOption.IGNORE_CASE), "")
-        }
-
-        val prefs = getSharedPreferences("FtpSettings", MODE_PRIVATE)
-        val customLocalPath = prefs.getString("PATH_LOCAL", null)?.ifBlank {
-            prefs.getString("PATH_SERVER", null)?.ifBlank { null }
-        }
-
-        for ((groupKey, filesInGroup) in groupedFiles) {
-            FileLogger.logToFile(this, "FileService", "Processing group $groupKey with files: ${filesInGroup.joinToString { it.name }}")
+            currentFileName = ""
+            currentSpeed = ""
+            currentProgress = 0
             
-            val successfullyDownloadedFiles = mutableListOf<FileInfo>()
-            var networkErrorOccurred = false
-
-            for (file in filesInGroup) {
-                FileLogger.logToFile(this, "FileService", "Checking ${file.name} (Path: ${file.path})")
-                val parentFolder = file.path.substringAfterLast('/').ifEmpty { file.path }
-                currentFileName = "$parentFolder/${file.name}"
-
-                // Remove /mnt/sd for local path
-                val cleanPath = file.path.removePrefix("/mnt/sd").trimStart('/')
-
-                // Check if file already exists locally
-                if (isLocalFileExisting(customLocalPath, cleanPath, file.name, file.size)) {
-                    FileLogger.logToFile(this, "FileService", "File ${file.name} already exists locally. Skipping download.")
-                    Log.i("FileService", "File ${file.name} already exists locally. Skipping download.")
-                    successfullyDownloadedFiles.add(file)
-                    continue
-                }
-
-                resetSpeed()
-                
-                // Construct URL
-                val downloadUrl = "http://${httpClient.cameraIp}${file.path}/${file.name}"
-                
-                httpClient.registerClient()
-                val startTime = System.currentTimeMillis()
-                
-                try {
-                    val isDownloaded = if (!customLocalPath.isNullOrEmpty() && customLocalPath.startsWith("content://")) {
-                        downloadFileToDocumentTree(downloadUrl, customLocalPath, cleanPath, file.name) { bytes, total ->
-                            updateSpeed(bytes)
-                            if (total > 0) {
-                                currentProgress = ((bytes * 100) / total).toInt()
-                            }
-                        }
-                    } else {
-                        val localDirFile = if (!customLocalPath.isNullOrEmpty()) {
-                            File(customLocalPath, cleanPath)
-                        } else {
-                            File(getExternalFilesDir(null), "camera/$cleanPath")
-                        }
-                        if (!localDirFile.exists()) localDirFile.mkdirs()
-                        val localPath = localDirFile.absolutePath
-
-                        httpClient.downloadFile(downloadUrl, localPath) { bytes, total ->
-                            updateSpeed(bytes)
-                            if (total > 0) {
-                                currentProgress = ((bytes * 100) / total).toInt()
-                            }
-                        }
-                    }
-                    
-                    val endTime = System.currentTimeMillis()
-                    
-                    if (isDownloaded) {
-                        Log.i("FileService", "Successfully downloaded: ${file.name}")
-                        val duration = (endTime - startTime) / 1000.0
-                        saveDownloadDuration(duration)
-                        incrementDownloadCount()
-                        successfullyDownloadedFiles.add(file)
-                    } else {
-                        Log.e("FileService", "Error downloading ${file.name}. Group incomplete.")
-                    }
-                } catch (e: Exception) {
-                    FileLogger.logToFile(this, "FileService", "Critical download error: ${e.message}")
-                    networkErrorOccurred = true
-                    break // Stop processing this group
-                }
-            }
-
-            if (networkErrorOccurred) {
-                FileLogger.logToFile(this, "FileService", "Network error detected. Aborting cycle.")
-                break // Stop all groups
-            }
-
-            // Only delete the group if ALL files in the group were successfully downloaded / already exist locally
-            if (successfullyDownloadedFiles.size == filesInGroup.size) {
-                FileLogger.logToFile(this, "FileService", "Group $groupKey downloaded/verified successfully. Deleting from camera...")
-                for (file in successfullyDownloadedFiles) {
-                    httpClient.registerClient()
-                    val deleted = httpClient.deleteRemoteFile(file.path, file.name, token)
-                    if (deleted) {
-                        FileLogger.logToFile(this, "FileService", "Deleted from camera: ${file.name}")
-                        if (pendingCameraFiles > 0) pendingCameraFiles--
-                    } else {
-                        Log.e("FileService", "Failed to delete ${file.name} from camera.")
-                    }
-                }
-            } else {
-                FileLogger.logToFile(this, "FileService", "Group $groupKey was NOT fully downloaded (Success: ${successfullyDownloadedFiles.size}/${filesInGroup.size}). Deletion skipped.")
-                // Update pending count by removing processed group from the count to reflect UI correctly
-                pendingCameraFiles -= filesInGroup.size
+            return true
+        } finally {
+            if (albumModeActive) {
+                val albumModeOff = httpClient.setAlbumMode(false)
+                FileLogger.logToFile(this, "FileService", "Resuming camera recording (Album Mode off): $albumModeOff")
             }
         }
-        currentFileName = ""
-        currentSpeed = ""
-        currentProgress = 0
-        
-        return true
     }
 
     private suspend fun downloadFileToDocumentTree(

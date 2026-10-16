@@ -410,15 +410,24 @@ class SettingsActivity : AppCompatActivity() {
                 return@launch
             }
 
-            val fileTypes = listOf(0, 8, 1, 6, 2, 3)
+            val fileTypes = (0..15).toList()
             val allFiles = mutableListOf<FileInfo>()
 
             withContext(Dispatchers.IO) {
-                for (type in fileTypes) {
-                    httpClient.registerClient()
-                    val files = httpClient.getFileList(type)
-                    if (files != null) {
-                        allFiles.addAll(files)
+                httpClient.registerClient()
+                var albumActive = false
+                try {
+                    albumActive = httpClient.setAlbumMode(true)
+                    kotlinx.coroutines.delay(2000)
+                    for (type in fileTypes) {
+                        val files = httpClient.getFileList(type)
+                        if (files != null) {
+                            allFiles.addAll(files)
+                        }
+                    }
+                } finally {
+                    if (albumActive) {
+                        httpClient.setAlbumMode(false)
                     }
                 }
             }
@@ -450,8 +459,8 @@ class SettingsActivity : AppCompatActivity() {
 
             var successCount = 0
             withContext(Dispatchers.IO) {
+                httpClient.registerClient()
                 for (file in filesToDelete) {
-                    httpClient.registerClient()
                     val deleted = httpClient.deleteRemoteFile(file.path, file.name, token)
                     if (deleted) {
                         successCount++
