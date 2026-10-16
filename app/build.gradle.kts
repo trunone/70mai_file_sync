@@ -59,7 +59,6 @@ dependencies {
     implementation(libs.androidx.activity)
     implementation(libs.androidx.constraintlayout)
 
-    implementation(libs.jsch)
     implementation(libs.commons.net)
     implementation(libs.okhttp)
     implementation(libs.androidx.lifecycle.runtime.ktx)

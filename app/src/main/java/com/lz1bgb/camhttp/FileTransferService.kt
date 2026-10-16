@@ -32,21 +32,17 @@ data class ServiceStatus(
     val totalFilesDownloaded: Int,      /**< Total files saved to phone */
     val pendingCameraFiles: Int,        /**< Number of files remaining on camera */
     val lastDownloadDuration: String,   /**< Time taken for last download */
-    val lastUploadResult: String,       /**< Result of the last SFTP upload */
-    val totalFilesUploaded: Int,        /**< Total files backed up to SFTP */
-    val pendingSftpFiles: Int,          /**< Number of local files waiting for upload */
     val currentFileName: String,        /**< Name of the file currently being transferred */
     val currentSpeed: String,           /**< Current transfer speed (MB/s or KB/s) */
     val currentProgress: Int,           /**< Current file transfer progress percentage (0-100) */
 )
 
 /**
- * @brief Foreground service that orchestrates file transfers from Dashcam (HTTP) to Phone, and Phone to SFTP.
+ * @brief Foreground service that orchestrates file transfers from Dashcam (HTTP) to Local Storage.
  * 
- * It periodically checks for the camera Wi-Fi. If found, it downloads new files. 
- * If not found, it attempts to upload downloaded files to an SFTP server.
+ * It periodically checks for the camera Wi-Fi. If found, it downloads new files to the local directory.
  */
-class FileTransferService : Service(){
+class FileTransferService : Service() {
 
     companion object {
         var isServiceRunningInForeground = false
@@ -58,7 +54,6 @@ class FileTransferService : Service(){
 
     private lateinit var httpClient: HttpClient
     private lateinit var httpAuth: HttpAuthentication
-    private lateinit var sftpUpload: SftpUpload
 
     // Handler and Runnable for periodic execution
     private lateinit var handler: Handler
@@ -101,7 +96,6 @@ class FileTransferService : Service(){
     }
 
     private var pendingCameraFiles = 0
-    private var pendingSftpFiles = 0
     private var currentFileName = ""
     private var currentSpeed = ""
     private var currentProgress = 0
@@ -114,46 +108,19 @@ class FileTransferService : Service(){
         val dhcp = httpClient.dhcpServerIpAddress
         val camIp = httpClient.cameraIp
 
-        // 1. Try HTTP (Camera) first
+        // Try HTTP (Camera) if connected
         if (dhcp == camIp) {
             FileLogger.logToFile(this, "FileService", "Camera detected ($camIp). Starting HTTP cycle.")
-            runHttpCycle()
-            updateStatus(getString(R.string.msg_http_success), "SUCCESS")
-            pendingSftpFiles = 0 
-            return 
-        }
-
-        // 2. If not on camera network, try SFTP
-        FileLogger.logToFile(this, "FileService", "Starting SFTP backup...")
-        pendingCameraFiles = 0
-        try {
-            val filesToUpload = sftpUpload.getLocalFilesToUpload()
-            pendingSftpFiles = filesToUpload.size
-            
-            if (pendingSftpFiles > 0) {
-                filesToUpload.forEach { fileInfo ->
-                    val parentFolder = fileInfo.relativePath.substringAfterLast('/').ifEmpty { fileInfo.relativePath }
-                    currentFileName = "$parentFolder/${fileInfo.name}"
-                    resetSpeed()
-                    sftpUpload.uploadAndDeleteFile(fileInfo) { bytes, total ->
-                        updateSpeed(bytes)
-                        if (total > 0) {
-                            currentProgress = ((bytes * 100) / total).toInt()
-                        }
-                    }
-                    pendingSftpFiles--
-                }
-                currentFileName = ""
-                currentSpeed = ""
-                currentProgress = 0
-                updateStatus(null, null, getString(R.string.msg_sftp_success), "SUCCESS")
+            val success = runHttpCycle()
+            if (success) {
+                updateStatus(getString(R.string.msg_http_success), "SUCCESS")
             } else {
-                updateStatus(null, null, getString(R.string.msg_sftp_idle), "IDLE")
+                updateStatus(getString(R.string.msg_http_error), "ERROR")
             }
-        } catch (e: Exception) {
-            FileLogger.logToFile(this, "FileService", "SFTP error: ${e.message}")
-            Log.e("FileService", "SFTP error: ${e.message}")
-            updateStatus(null, null, getString(R.string.msg_sftp_success), "ERROR")
+        } else {
+            FileLogger.logToFile(this, "FileService", "Camera network not detected.")
+            pendingCameraFiles = 0
+            updateStatus(getString(R.string.msg_camera_not_found), "IDLE")
         }
     }
 
@@ -214,6 +181,11 @@ class FileTransferService : Service(){
             it.name.replace(Regex("[FB]\\.(MP4|thm|jpg|JPG)$", RegexOption.IGNORE_CASE), "")
         }
 
+        val prefs = getSharedPreferences("FtpSettings", MODE_PRIVATE)
+        val customLocalPath = prefs.getString("PATH_LOCAL", null)?.ifBlank {
+            prefs.getString("PATH_SERVER", null)?.ifBlank { null }
+        }
+
         for ((groupKey, filesInGroup) in groupedFiles) {
             FileLogger.logToFile(this, "FileService", "Processing group $groupKey with files: ${filesInGroup.joinToString { it.name }}")
             
@@ -231,7 +203,11 @@ class FileTransferService : Service(){
                 
                 // Remove /mnt/sd for local path
                 val cleanPath = file.path.removePrefix("/mnt/sd").trimStart('/')
-                val localDirFile = File(getExternalFilesDir(null), "camera/$cleanPath")
+                val localDirFile = if (!customLocalPath.isNullOrEmpty()) {
+                    File(customLocalPath, cleanPath)
+                } else {
+                    File(getExternalFilesDir(null), "camera/$cleanPath")
+                }
                 if (!localDirFile.exists()) localDirFile.mkdirs()
                 
                 val localPath = localDirFile.absolutePath
@@ -262,7 +238,6 @@ class FileTransferService : Service(){
                         }
                     } else {
                         Log.e("FileService", "Error downloading ${file.name}. Group incomplete.")
-                        // If it failed but not necessarily a network drop, we still skip the group
                     }
                 } catch (e: Exception) {
                     FileLogger.logToFile(this, "FileService", "Critical download error: ${e.message}")
@@ -345,13 +320,11 @@ class FileTransferService : Service(){
         }
     }
 
-    private fun updateStatus(dlStatus: String?, dlRes: String?, upStatus: String? = null, upRes: String? = null) {
+    private fun updateStatus(dlStatus: String?, dlRes: String?) {
         val prefs = getSharedPreferences("FtpStats", MODE_PRIVATE)
         prefs.edit {
             dlStatus?.let { putString("FTP_STATUS", it) }
             dlRes?.let { putString("FTP_RESULT", it) }
-            upStatus?.let { putString("SFTP_STATUS", it) }
-            upRes?.let { putString("SFTP_RESULT", it) }
         }
     }
 
@@ -370,7 +343,6 @@ class FileTransferService : Service(){
 
         httpClient = HttpClient(this)
         httpAuth = HttpAuthentication(httpClient)
-        sftpUpload = SftpUpload(this)
     }
 
     fun stopTransfer() {
@@ -380,7 +352,7 @@ class FileTransferService : Service(){
         isTaskRunning.set(false)
         nextExecutionTime = 0L
 
-        //Zeroes statistics
+        // Zeroes statistics
         currentFileName = ""
         currentSpeed = ""
 
@@ -438,8 +410,6 @@ class FileTransferService : Service(){
         return START_STICKY
     }
 
-
-
     private fun createNotificationChannel() {
         val serviceChannel = NotificationChannel("FileTransferChannel", "File Transfer Service", NotificationManager.IMPORTANCE_DEFAULT)
         val manager = getSystemService(NotificationManager::class.java)
@@ -477,11 +447,9 @@ class FileTransferService : Service(){
         }
         val statsPrefs = getSharedPreferences("FtpStats", MODE_PRIVATE)
         val totalDownloads = statsPrefs.getInt("TOTAL_DOWNLOADS", 0)
-        val totalUploads = statsPrefs.getInt("TOTAL_UPLOADS", 0)
         val lastDuration = statsPrefs.getString("LAST_DOWNLOAD_DURATION", "0 sec.") ?: "0 sec."
 
-        val lastDownloadResult = statsPrefs.getString("FTP_STATUS", null)?: "Waiting for FTP"
-        val lastUploadResult = statsPrefs.getString("SFTP_STATUS", null)?: "Waiting for SFTP"
+        val lastDownloadResult = statsPrefs.getString("FTP_STATUS", null) ?: getString(R.string.status_idle)
 
         return ServiceStatus(
             generalStatus, 
@@ -489,9 +457,6 @@ class FileTransferService : Service(){
             totalDownloads, 
             pendingCameraFiles,
             lastDuration, 
-            lastUploadResult, 
-            totalUploads,
-            pendingSftpFiles,
             currentFileName,
             currentSpeed,
             currentProgress

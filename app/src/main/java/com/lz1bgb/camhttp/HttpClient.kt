@@ -498,7 +498,7 @@ class HttpClient(context: Context) {
                 val url = "http://$dhcp/cgi-bin/$queryPath$queryParams&signkey=$sign"
                 val response = executeRequest(url)
                 
-                FileLogger.logToFile(appContext!!, "HttpClient", "Update FW response: $response")
+                FileLogger.logToFile(appContext, "HttpClient", "Update FW response: $response")
                 response?.contains("\"ResultCode\":0") == true || response?.contains("\"ResultCode\":\"0\"") == true
             } catch (e: Exception) {
                 FileLogger.logToFile(appContext, "HttpClient", "Update FW error: ${e.message}")

@@ -62,7 +62,6 @@ class SettingsActivity : AppCompatActivity() {
 
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
-            // Take service instance via  Binder-а
             val binder = service as FileTransferService.LocalBinder
             fileTransferService = binder.getService()
             isBound = true
@@ -92,7 +91,6 @@ class SettingsActivity : AppCompatActivity() {
             handler.postDelayed(this, 5000) 
         }
     }
-
 
     fun activateKeepScreenOn() {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -137,9 +135,6 @@ class SettingsActivity : AppCompatActivity() {
             binding.totalFilesDownloadedTextView.text = getString(R.string.label_total_downloaded, status.totalFilesDownloaded)
             binding.lastDownloadDurationTextView.text = getString(R.string.label_last_duration, status.lastDownloadDuration)
             binding.pendingCameraFilesTextView.text = getString(R.string.label_pending_camera, status.pendingCameraFiles)
-            binding.lastUploadResultTextView.text = getString(R.string.label_last_upload, status.lastUploadResult)
-            binding.totalFilesUploadedTextView.text = getString(R.string.label_total_uploaded, status.totalFilesUploaded)
-            binding.pendingSftpFilesTextView.text = getString(R.string.label_pending_sftp, status.pendingSftpFiles)
             
             if (status.currentFileName.isNotEmpty()) {
                 binding.fileNameInProcess.text = getString(R.string.label_current_file, status.currentFileName)
@@ -159,9 +154,6 @@ class SettingsActivity : AppCompatActivity() {
             binding.totalFilesDownloadedTextView.visibility = View.VISIBLE
             binding.lastDownloadDurationTextView.visibility = View.VISIBLE
             binding.pendingCameraFilesTextView.visibility = View.VISIBLE
-            binding.lastUploadResultTextView.visibility = View.VISIBLE
-            binding.totalFilesUploadedTextView.visibility = View.VISIBLE
-            binding.pendingSftpFilesTextView.visibility = View.VISIBLE
         } else {
             updateStartStopButtonUI()
         }
@@ -208,19 +200,13 @@ class SettingsActivity : AppCompatActivity() {
         binding.camSSIDTxt.setText(prefs.getString("SSID_CAM", ""))
         binding.camWifiPassTxt.setText(prefs.getString("PASS_WIFI_CAM", ""))
         
-        binding.backupIPTxt.setText(prefs.getString("IP_SERVER", ""))
-        binding.backupUserTxt.setText(prefs.getString("USER_SERVER", ""))
-        binding.backupPassTxt.setText(prefs.getString("PASS_SERVER", ""))
-        binding.backupPathTxt.setText(prefs.getString("PATH_SERVER", ""))
+        val savedLocalPath = prefs.getString("PATH_LOCAL", null) ?: prefs.getString("PATH_SERVER", "")
+        binding.backupPathTxt.setText(savedLocalPath)
 
         // Display initial counters
         val initialTotalDownloads = statsPrefs.getInt("TOTAL_DOWNLOADS", 0)
         binding.totalFilesDownloadedTextView.text = getString(R.string.label_total_downloaded, initialTotalDownloads)
         binding.totalFilesDownloadedTextView.visibility = View.VISIBLE
-
-        val initialTotalUploads = statsPrefs.getInt("TOTAL_UPLOADS", 0)
-        binding.totalFilesUploadedTextView.text = getString(R.string.label_total_uploaded, initialTotalUploads)
-        binding.totalFilesUploadedTextView.visibility = View.VISIBLE
 
         /**
          * Toggle button logic for Start/Stop
@@ -234,10 +220,7 @@ class SettingsActivity : AppCompatActivity() {
                     putString("IP_CAM", binding.camIPTxt.text.toString())
                     putString("SSID_CAM", binding.camSSIDTxt.text.toString())
                     putString("PASS_WIFI_CAM", binding.camWifiPassTxt.text.toString())
-                    putString("IP_SERVER", binding.backupIPTxt.text.toString())
-                    putString("USER_SERVER", binding.backupUserTxt.text.toString())
-                    putString("PASS_SERVER", binding.backupPassTxt.text.toString())
-                    putString("PATH_SERVER", binding.backupPathTxt.text.toString())
+                    putString("PATH_LOCAL", binding.backupPathTxt.text.toString())
                 }
 
                 startForegroundService(serviceIntent)
@@ -253,7 +236,6 @@ class SettingsActivity : AppCompatActivity() {
                         unbindService(serviceConnection)
                     } catch (e: Exception) {
                         FileLogger.logToFile(this@SettingsActivity,"Activity", "Unbind error: ${e.message}")
-
                     }
 
                     isBound = false
@@ -270,14 +252,11 @@ class SettingsActivity : AppCompatActivity() {
             val sp = getSharedPreferences("FtpStats", MODE_PRIVATE)
             sp.edit {
                 putInt("TOTAL_DOWNLOADS", 0)
-                putInt("TOTAL_UPLOADS", 0)
                 putString("FTP_STATUS", getString(R.string.status_idle))
-                putString("SFTP_STATUS", getString(R.string.status_idle))
                 putString("LAST_DOWNLOAD_DURATION", "0 sec.")
             }
             binding.totalFilesDownloadedTextView.text = getString(R.string.label_total_downloaded, 0)
             binding.lastDownloadDurationTextView.text = getString(R.string.label_last_duration, "0 sec.")
-            binding.totalFilesUploadedTextView.text = getString(R.string.label_total_uploaded, 0)
             Toast.makeText(this, "Stats Reset.", Toast.LENGTH_SHORT).show()
         }
 
@@ -336,12 +315,12 @@ class SettingsActivity : AppCompatActivity() {
 
         binding.sleepButton.setOnClickListener {
             isModeActive = !isModeActive
-            if(isModeActive){
+            if (isModeActive) {
                 activateKeepScreenOn()
                 binding.sleepButton.setBackgroundColor(ContextCompat.getColor(this, android.R.color.holo_red_dark))
                 binding.sleepButton.setTextColor(Color.WHITE)
                 Toast.makeText(this, "Keep Screen On: ACTIVE", Toast.LENGTH_SHORT).show()
-            }else{
+            } else {
                 deactivateKeepScreenOn()
                 binding.sleepButton.setBackgroundColor(Color.TRANSPARENT)
                 binding.sleepButton.setTextColor(ContextCompat.getColor(this, R.color.white))
@@ -368,7 +347,6 @@ class SettingsActivity : AppCompatActivity() {
             override fun onTabReselected(tab: TabLayout.Tab?) {}
         })
     }
-
 
     private fun connectToWifi() {
         val ssid = binding.camSSIDTxt.text.toString()
@@ -449,7 +427,6 @@ class SettingsActivity : AppCompatActivity() {
                 }
                 
                 if (langCode != currentLang) {
-                    // Modern way to set application locales
                     val appLocale: LocaleListCompat = LocaleListCompat.forLanguageTags(langCode)
                     AppCompatDelegate.setApplicationLocales(appLocale)
                 }

@@ -13,11 +13,9 @@
     <string name="label_network">Network</string>
     <string name="cam_settings_title">Camera Settings</string>
     <string name="cam_ip_hint">e.g. 192.168.1.1</string>
-    <string name="archive_settings_title">Archive Settings (SFTP)</string>
-    <string name="archive_ip_hint">SFTP Server IP</string>
-    <string name="archive_user_hint">SFTP Username</string>
-    <string name="archive_pass_hint">SFTP Password</string>
-    <string name="archive_path_hint">Upload path, e.g. /backups/</string>
+    <string name="local_settings_title">Local Folder Settings</string>
+    <string name="label_local_path">Local Storage Path</string>
+    <string name="local_path_hint">Save path, e.g. /storage/emulated/0/Movies/70mai</string>
     <string name="select_language">Select Language</string>
     <string name="status_idle">Idle</string>
     <string name="speed_idle">0 KB/s</string>
@@ -27,17 +25,10 @@
     <string name="label_camera_ssid">Wi-Fi Name (SSID)</string>
     <string name="label_camera_wifi_pass">Wi-Fi Password</string>
     <string name="btn_connect_wifi">Connect Wi-Fi</string>
-    <string name="label_archive_ip">Archive IP</string>
-    <string name="label_archive_user">Archive User</string>
-    <string name="label_archive_pass">Archive Password</string>
-    <string name="label_archive_path">Archive Path</string>
     <string name="label_last_download">Last Download: %1$s</string>
     <string name="label_total_downloaded">Total Downloaded: %1$d</string>
     <string name="label_last_duration">Last Transfer Time: %1$s</string>
     <string name="label_pending_camera">Remaining on Camera: %1$d</string>
-    <string name="label_last_upload">Last Upload: %1$s</string>
-    <string name="label_total_uploaded">Total Uploaded: %1$d</string>
-    <string name="label_pending_sftp">Remaining for Upload: %1$d</string>
     <string name="label_current_file">File: %1$s</string>
     <string name="label_current_speed">Speed: %1$s</string>
     <string name="label_current_progress">Progress: %1$d%%</string>
@@ -46,8 +37,8 @@
     <string name="status_waiting_start">Waiting to start check.</string>
     <string name="status_next_check">Idle. Next check in %1$dm %2$ds.</string>
     <string name="msg_http_success">HTTP: Cycle completed</string>
-    <string name="msg_sftp_success">SFTP: Files uploaded</string>
-    <string name="msg_sftp_idle">SFTP: Nothing to upload</string>
+    <string name="msg_http_error">HTTP: Download error</string>
+    <string name="msg_camera_not_found">Camera not found</string>
     <string name="label_access_point">70mai_d08_xxxx</string>
     <string name="label_access_point_password">Password</string>
 </resources>

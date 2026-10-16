@@ -13,11 +13,9 @@
     <string name="label_network">Сеть</string>
     <string name="cam_settings_title">Настройки камеры</string>
     <string name="cam_ip_hint">Напр. 192.168.1.1</string>
-    <string name="archive_settings_title">Настройки архива (SFTP)</string>
-    <string name="archive_ip_hint">IP-адрес SFTP-сервера</string>
-    <string name="archive_user_hint">Имя пользователя SFTP</string>
-    <string name="archive_pass_hint">Парола SFTP</string>
-    <string name="archive_path_hint">Путь загрузки, напр. /backups/</string>
+    <string name="local_settings_title">Настройки локального архива</string>
+    <string name="label_local_path">Локальный путь</string>
+    <string name="local_path_hint">Путь сохранения, напр. /storage/emulated/0/Movies/70mai</string>
     <string name="select_language">Выберите язык</string>
     <string name="status_idle">В ожидании</string>
     <string name="speed_idle">0 КБ/с</string>
@@ -27,17 +25,10 @@
     <string name="label_camera_ssid">Wi-Fi Имя (SSID)</string>
     <string name="label_camera_wifi_pass">Wi-Fi Пароль</string>
     <string name="btn_connect_wifi">Подключить Wi-Fi</string>
-    <string name="label_archive_ip">IP-адрес архива</string>
-    <string name="label_archive_user">Пользователь архива</string>
-    <string name="label_archive_pass">Пароль архива</string>
-    <string name="label_archive_path">Путь архива</string>
     <string name="label_last_download">Последняя загрузка: %1$s</string>
     <string name="label_total_downloaded">Всего загружено: %1$d</string>
     <string name="label_last_duration">Время последней передачи: %1$s</string>
     <string name="label_pending_camera">Осталось на камере: %1$d</string>
-    <string name="label_last_upload">Последняя выгрузка: %1$s</string>
-    <string name="label_total_uploaded">Всего выгружено: %1$d</string>
-    <string name="label_pending_sftp">Осталось для выгрузки: %1$d</string>
     <string name="label_current_file">Файл: %1$s</string>
     <string name="label_current_speed">Скорость: %1$s</string>
     <string name="label_current_progress">Прогресс: %1$d%%</string>
@@ -46,8 +37,8 @@
     <string name="status_waiting_start">Ожидание начала проверки.</string>
     <string name="status_next_check">Ожидание. Следующая проверка через %1$dм %2$dс.</string>
     <string name="msg_http_success">HTTP: Цикл завершен</string>
-    <string name="msg_sftp_success">SFTP: Файлы выгружены</string>
-    <string name="msg_sftp_idle">SFTP: Нет файлов для выгрузки</string>
+    <string name="msg_http_error">HTTP: Ошибка загрузки</string>
+    <string name="msg_camera_not_found">Камера не найдена</string>
     <string name="label_access_point">70mai_d08_xxxx</string>
     <string name="label_access_point_password">Парола</string>
 </resources>

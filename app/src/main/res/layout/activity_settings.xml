@@ -294,41 +294,6 @@
                     android:visibility="gone"
                     tools:text="Remaining on camera: 10"
                     tools:visibility="visible" />
-
-                <TextView
-                    android:id="@+id/lastUploadResultTextView"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:gravity="center"
-                    android:textAppearance="?attr/textAppearanceBody2"
-                    android:visibility="gone"
-                    tools:text="Last upload: SUCCESS"
-                    tools:visibility="visible" />
-
-                <TextView
-                    android:id="@+id/totalFilesUploadedTextView"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:gravity="center"
-                    android:textAppearance="?attr/textAppearanceBody1"
-                    android:textStyle="bold"
-                    android:visibility="gone"
-                    tools:text="Total uploaded: 123"
-                    tools:visibility="visible" />
-
-                <TextView
-                    android:id="@+id/pendingSftpFilesTextView"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:gravity="center"
-                    android:textAppearance="?attr/textAppearanceBody2"
-                    android:textColor="@android:color/holo_green_dark"
-                    android:visibility="gone"
-                    tools:text="Remaining for upload: 5"
-                    tools:visibility="visible" />
             </LinearLayout>
 
             <!-- TAB 2: CONFIGURATION -->
@@ -406,62 +371,19 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="24dp"
-                    android:text="@string/archive_settings_title" />
+                    android:text="@string/local_settings_title" />
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
-                    android:text="@string/label_archive_ip" />
-
-                <EditText
-                    android:id="@+id/backupIPTxt"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:hint="@string/archive_ip_hint"
-                    android:importantForAutofill="no"
-                    android:inputType="text" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:text="@string/label_archive_user" />
-
-                <EditText
-                    android:id="@+id/backupUserTxt"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:hint="@string/archive_user_hint"
-                    android:importantForAutofill="no"
-                    android:inputType="text" />
-
-                <TextView
-                    android:id="@+id/textView2"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:text="@string/label_archive_pass" />
-
-                <EditText
-                    android:id="@+id/backupPassTxt"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:hint="@string/archive_pass_hint"
-                    android:importantForAutofill="no"
-                    android:inputType="textPassword" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:text="@string/label_archive_path" />
+                    android:text="@string/label_local_path" />
 
                 <EditText
                     android:id="@+id/backupPathTxt"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:hint="@string/archive_path_hint"
+                    android:hint="@string/local_path_hint"
                     android:importantForAutofill="no"
                     android:inputType="text" />
 
