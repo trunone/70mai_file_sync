@@ -127,6 +127,42 @@ class FileTransferService : Service() {
         }
     }
 
+    private fun isLocalFileExisting(
+        customLocalPath: String?,
+        cleanPath: String,
+        fileName: String,
+        fileSizeString: String?
+    ): Boolean {
+        return try {
+            val expectedSize = fileSizeString?.toLongOrNull()
+            if (!customLocalPath.isNullOrEmpty() && customLocalPath.startsWith("content://")) {
+                val treeUri = Uri.parse(customLocalPath)
+                val rootDoc = DocumentFile.fromTreeUri(this, treeUri) ?: return false
+                var currentDir = rootDoc
+                val subFolders = cleanPath.split('/').filter { it.isNotEmpty() }
+                for (folderName in subFolders) {
+                    val existing = currentDir.findFile(folderName) ?: return false
+                    if (!existing.isDirectory) return false
+                    currentDir = existing
+                }
+                val targetFile = currentDir.findFile(fileName)
+                targetFile != null && targetFile.exists() && targetFile.length() > 0 &&
+                        (expectedSize == null || expectedSize <= 0 || targetFile.length() == expectedSize)
+            } else {
+                val localDirFile = if (!customLocalPath.isNullOrEmpty()) {
+                    File(customLocalPath, cleanPath)
+                } else {
+                    File(getExternalFilesDir(null), "camera/$cleanPath")
+                }
+                val localFile = File(localDirFile, fileName)
+                localFile.exists() && localFile.length() > 0 &&
+                        (expectedSize == null || expectedSize <= 0 || localFile.length() == expectedSize)
+            }
+        } catch (e: Exception) {
+            false
+        }
+    }
+
     private suspend fun runHttpCycle(): Boolean {
         var token = httpClient.sessionToken
         
@@ -196,16 +232,25 @@ class FileTransferService : Service() {
             var networkErrorOccurred = false
 
             for (file in filesInGroup) {
-                FileLogger.logToFile(this, "FileService", "Downloading ${file.name} (Path: ${file.path})")
+                FileLogger.logToFile(this, "FileService", "Checking ${file.name} (Path: ${file.path})")
                 val parentFolder = file.path.substringAfterLast('/').ifEmpty { file.path }
                 currentFileName = "$parentFolder/${file.name}"
+
+                // Remove /mnt/sd for local path
+                val cleanPath = file.path.removePrefix("/mnt/sd").trimStart('/')
+
+                // Check if file already exists locally
+                if (isLocalFileExisting(customLocalPath, cleanPath, file.name, file.size)) {
+                    FileLogger.logToFile(this, "FileService", "File ${file.name} already exists locally. Skipping download.")
+                    Log.i("FileService", "File ${file.name} already exists locally. Skipping download.")
+                    successfullyDownloadedFiles.add(file)
+                    continue
+                }
+
                 resetSpeed()
                 
                 // Construct URL
                 val downloadUrl = "http://${httpClient.cameraIp}${file.path}/${file.name}"
-                
-                // Remove /mnt/sd for local path
-                val cleanPath = file.path.removePrefix("/mnt/sd").trimStart('/')
                 
                 httpClient.registerClient()
                 val startTime = System.currentTimeMillis()
@@ -258,9 +303,9 @@ class FileTransferService : Service() {
                 break // Stop all groups
             }
 
-            // Only delete the group if ALL files in the group were successfully downloaded
+            // Only delete the group if ALL files in the group were successfully downloaded / already exist locally
             if (successfullyDownloadedFiles.size == filesInGroup.size) {
-                FileLogger.logToFile(this, "FileService", "Group $groupKey downloaded successfully. Deleting from camera...")
+                FileLogger.logToFile(this, "FileService", "Group $groupKey downloaded/verified successfully. Deleting from camera...")
                 for (file in successfullyDownloadedFiles) {
                     httpClient.registerClient()
                     val deleted = httpClient.deleteRemoteFile(file.path, file.name, token)
