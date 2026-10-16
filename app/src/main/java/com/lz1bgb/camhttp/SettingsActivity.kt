@@ -20,16 +20,12 @@ import android.os.IBinder
 import android.os.Looper
 import android.view.View
 import android.view.WindowManager
-import android.widget.AdapterView
-import android.widget.ArrayAdapter
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
-import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.edit
-import androidx.core.os.LocaleListCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
@@ -183,7 +179,6 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         httpClient = HttpClient(this)
-        setupLanguageSpinner()
         setupTabs()
 
         // Bind to service if it's already running or to allow it to be created
@@ -395,43 +390,6 @@ class SettingsActivity : AppCompatActivity() {
         } catch (e: Exception) {
             FileLogger.logToFile(this, "WifiError", "Error: ${e.message}")
             // If an error is thrown here, the NEARBY_WIFI_DEVICES permission is likely missing
-        }
-    }
-
-    private fun setupLanguageSpinner() {
-        val languages = arrayOf("Български", "English", "Русский")
-        val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, languages)
-        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-        binding.languageSpinner.adapter = adapter
-
-        // Get current language from AppCompatDelegate
-        val currentLocales = AppCompatDelegate.getApplicationLocales()
-        val currentLang = if (!currentLocales.isEmpty) currentLocales.get(0)?.language ?: "bg" else "bg"
-        
-        val selection = when (currentLang) {
-            "bg" -> 0
-            "en" -> 1
-            "ru" -> 2
-            else -> 0
-        }
-        
-        binding.languageSpinner.setSelection(selection, false)
-
-        binding.languageSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
-                val langCode = when (position) {
-                    0 -> "bg"
-                    1 -> "en"
-                    2 -> "ru"
-                    else -> "bg"
-                }
-                
-                if (langCode != currentLang) {
-                    val appLocale: LocaleListCompat = LocaleListCompat.forLanguageTags(langCode)
-                    AppCompatDelegate.setApplicationLocales(appLocale)
-                }
-            }
-            override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
     }
 }
