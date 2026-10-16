@@ -35,8 +35,6 @@
     <string name="btn_delete">Delete</string>
     <string name="btn_save">Save</string>
     <string name="label_camera_ip">Camera IP</string>
-    <string name="label_camera_ssid">Wi-Fi Name (SSID)</string>
-    <string name="label_camera_wifi_pass">Wi-Fi Password</string>
     <string name="btn_connect_wifi">Connect Wi-Fi</string>
     <string name="label_last_download">Last Download: %1$s</string>
     <string name="label_total_downloaded">Total Downloaded: %1$d</string>
@@ -52,6 +50,4 @@
     <string name="msg_http_success">HTTP: Cycle completed</string>
     <string name="msg_http_error">HTTP: Download error</string>
     <string name="msg_camera_not_found">Camera not found</string>
-    <string name="label_access_point">70mai_d08_xxxx</string>
-    <string name="label_access_point_password">Password</string>
 </resources>
