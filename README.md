@@ -41,17 +41,7 @@ The app uses `OkHttpClient` with custom `SocketFactory` binding. When a target U
 
 ## Licensing
 
-This project is subject to a **Dual License** model:
-
-### 1. Non-Commercial Use
-For personal, educational, or non-profit use, this software is licensed under the **GNU General Public License v3.0 (GPLv3)**. See the `LICENSE` file for details.
-
-### 2. Commercial Use
-Any use within a commercial entity, for-profit project, or redistribution as part of a paid product requires a separate **Commercial License**. 
-- You **must** obtain written consent from the author.
-- For inquiries and commercial terms, please contact: **lz1bgb@gmail.com**
-
-See `LICENSE-COMMERCIAL` for more information.
+This software is licensed under the **GNU General Public License v3.0 (GPLv3)**. See the `LICENSE` file for details.
 
 ---
 *Developed by [Sr-bgb](https://github.com/Sr-bgb)*
