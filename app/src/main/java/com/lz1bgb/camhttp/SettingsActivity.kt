@@ -1,33 +1,24 @@
 package com.lz1bgb.camhttp
 
-import android.Manifest
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
-import android.content.pm.PackageManager
 import android.content.res.ColorStateList
 import android.graphics.Color
-import android.net.ConnectivityManager
-import android.net.Network
-import android.net.NetworkCapabilities
-import android.net.NetworkRequest
-import android.net.wifi.WifiNetworkSpecifier
-import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.provider.Settings
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
 import android.view.WindowManager
-import android.widget.EditText
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.edit
 import androidx.core.view.ViewCompat
@@ -78,16 +69,6 @@ class SettingsActivity : AppCompatActivity() {
             fileTransferService = null
             isBound = false
             updateStartStopButtonUI()
-        }
-    }
-
-    private val requestPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { isGranted: Boolean ->
-        if (isGranted) {
-            connectToWifi()
-        } else {
-            Toast.makeText(this, "Location permission is required for Wi-Fi", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -169,8 +150,6 @@ class SettingsActivity : AppCompatActivity() {
 
         val prefs = getSharedPreferences("FtpSettings", MODE_PRIVATE)
         dialogBinding.dialogCamIPTxt.setText(prefs.getString("IP_CAM", "192.168.0.1"))
-        dialogBinding.dialogCamSSIDTxt.setText(prefs.getString("SSID_CAM", ""))
-        dialogBinding.dialogCamWifiPassTxt.setText(prefs.getString("PASS_WIFI_CAM", ""))
 
         val savedLocalPath = prefs.getString("PATH_LOCAL", null) ?: prefs.getString("PATH_SERVER", "")
         dialogBinding.dialogBackupPathTxt.setText(savedLocalPath)
@@ -185,8 +164,6 @@ class SettingsActivity : AppCompatActivity() {
             .setPositiveButton(R.string.btn_save) { _, _ ->
                 prefs.edit {
                     putString("IP_CAM", dialogBinding.dialogCamIPTxt.text.toString())
-                    putString("SSID_CAM", dialogBinding.dialogCamSSIDTxt.text.toString())
-                    putString("PASS_WIFI_CAM", dialogBinding.dialogCamWifiPassTxt.text.toString())
                     putString("PATH_LOCAL", dialogBinding.dialogBackupPathTxt.text.toString())
                 }
                 Toast.makeText(this, "Settings saved.", Toast.LENGTH_SHORT).show()
@@ -360,11 +337,7 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         binding.connectWifiButton.setOnClickListener {
-            if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-                requestPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
-            } else {
-                connectToWifi()
-            }
+            startActivity(Intent(Settings.ACTION_WIFI_SETTINGS))
         }
 
         binding.sleepButton.setOnClickListener {
@@ -517,53 +490,4 @@ class SettingsActivity : AppCompatActivity() {
         })
     }
 
-    private fun connectToWifi() {
-        val prefs = getSharedPreferences("FtpSettings", MODE_PRIVATE)
-        val ssid = prefs.getString("SSID_CAM", "") ?: ""
-        val pass = prefs.getString("PASS_WIFI_CAM", "") ?: ""
-
-        if (ssid.isEmpty()) {
-            Toast.makeText(this, "Please set SSID in Settings.", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        val connectivityManager = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-
-        val specifier = WifiNetworkSpecifier.Builder()
-            .setSsid(ssid)
-            .apply {
-                if (pass.isNotEmpty()) setWpa2Passphrase(pass)
-            }
-            .build()
-
-        val request = NetworkRequest.Builder()
-            .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
-            .removeCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-            .setNetworkSpecifier(specifier)
-            .build()
-
-        try {
-            connectivityManager.requestNetwork(request, object : ConnectivityManager.NetworkCallback() {
-                override fun onAvailable(network: Network) {
-                    super.onAvailable(network)
-                    connectivityManager.bindProcessToNetwork(network)
-
-                    runOnUiThread {
-                        Toast.makeText(this@SettingsActivity, "Connection successful!", Toast.LENGTH_SHORT).show()
-                    }
-                }
-
-                override fun onUnavailable() {
-                    super.onUnavailable()
-                    runOnUiThread {
-                        Toast.makeText(this@SettingsActivity, "Camera not found", Toast.LENGTH_SHORT).show()
-                    }
-                }
-            })
-
-            Toast.makeText(this, "Searching for $ssid...", Toast.LENGTH_SHORT).show()
-        } catch (e: Exception) {
-            FileLogger.logToFile(this, "WifiError", "Error: ${e.message}")
-        }
-    }
 }
