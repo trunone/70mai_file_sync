@@ -157,6 +157,9 @@ class SettingsActivity : AppCompatActivity() {
         val autoDeleteEnabled = prefs.getBoolean("AUTO_DELETE_REMOTE", true)
         dialogBinding.dialogAutoDeleteCheckBox.isChecked = autoDeleteEnabled
 
+        val cycleCheckEnabled = prefs.getBoolean("CYCLE_CHECK_ENABLED", true)
+        dialogBinding.dialogCycleCheckCheckBox.isChecked = cycleCheckEnabled
+
         dialogBinding.dialogBrowseFolderButton.setOnClickListener {
             openDocumentTreeLauncher.launch(null)
         }
@@ -169,6 +172,7 @@ class SettingsActivity : AppCompatActivity() {
                     putString("IP_CAM", dialogBinding.dialogCamIPTxt.text.toString())
                     putString("PATH_LOCAL", dialogBinding.dialogBackupPathTxt.text.toString())
                     putBoolean("AUTO_DELETE_REMOTE", dialogBinding.dialogAutoDeleteCheckBox.isChecked)
+                    putBoolean("CYCLE_CHECK_ENABLED", dialogBinding.dialogCycleCheckCheckBox.isChecked)
                 }
                 Toast.makeText(this, "Settings saved.", Toast.LENGTH_SHORT).show()
                 activeDialogBinding = null

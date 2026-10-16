@@ -88,8 +88,13 @@ class FileTransferService : Service() {
                     Log.e("FileService", "Error in cycle: ${e.message}")
                 } finally {
                     isTaskRunning.set(false)
-                    if (job.isActive) {
+                    val prefs = getSharedPreferences("FtpSettings", MODE_PRIVATE)
+                    val isCycleCheck = prefs.getBoolean("CYCLE_CHECK_ENABLED", true)
+                    if (job.isActive && isCycleCheck) {
                         scheduleNextRun()
+                    } else if (!isCycleCheck) {
+                        FileLogger.logToFile(this@FileTransferService, "FileService", "One-time check completed. Stopping service.")
+                        stopSelf()
                     }
                 }
             }
@@ -559,8 +564,15 @@ class FileTransferService : Service() {
         if (!isTaskRunning.get() && !isScheduled.get()) {
             handler.removeCallbacks(periodicCheck)
             isScheduled.set(true)
-            nextExecutionTime = System.currentTimeMillis() + checkInterval
-            handler.postDelayed(periodicCheck, checkInterval)
+            val prefs = getSharedPreferences("FtpSettings", MODE_PRIVATE)
+            val isCycleCheck = prefs.getBoolean("CYCLE_CHECK_ENABLED", true)
+            if (isCycleCheck) {
+                nextExecutionTime = System.currentTimeMillis() + checkInterval
+                handler.postDelayed(periodicCheck, checkInterval)
+            } else {
+                nextExecutionTime = System.currentTimeMillis()
+                handler.post(periodicCheck)
+            }
         }
 
         return START_STICKY
