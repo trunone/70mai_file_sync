@@ -9,6 +9,14 @@
     android:fitsSystemWindows="true"
     tools:context=".SettingsActivity">
 
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/toolbar"
+        android:layout_width="match_parent"
+        android:layout_height="?attr/actionBarSize"
+        android:background="@color/surface_dark"
+        app:title="@string/app_name"
+        app:titleTextColor="#FFFFFF" />
+
     <com.google.android.material.tabs.TabLayout
         android:id="@+id/tabLayout"
         android:layout_width="match_parent"
@@ -27,27 +35,26 @@
         <com.google.android.material.tabs.TabItem
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="@string/tab_settings" />
+            android:text="@string/tab_viewer" />
     </com.google.android.material.tabs.TabLayout>
 
-    <ScrollView
+    <FrameLayout
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:fillViewport="true">
+        android:layout_height="match_parent">
 
-        <LinearLayout
+        <!-- TAB 1: CONTROLS & STATUS -->
+        <ScrollView
+            android:id="@+id/controlsLayout"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:padding="16dp">
+            android:layout_height="match_parent"
+            android:fillViewport="true"
+            android:visibility="visible">
 
-            <!-- TAB 1: CONTROLS & STATUS -->
             <LinearLayout
-                android:id="@+id/controlsLayout"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
-                android:visibility="visible">
+                android:padding="16dp">
 
                 <androidx.constraintlayout.widget.ConstraintLayout
                     android:layout_width="match_parent"
@@ -127,7 +134,6 @@
                         app:layout_constraintEnd_toEndOf="parent"
                         app:layout_constraintTop_toBottomOf="@id/clrCount" />
 
-                    <!-- Sleep and Album Buttons Row (Guaranteed 50/50 split of 80% total) -->
                     <Button
                         android:id="@+id/sleepButton"
                         style="?attr/materialButtonOutlinedStyle"
@@ -155,7 +161,6 @@
                         app:layout_constraintTop_toTopOf="@+id/sleepButton"
                         app:layout_constraintWidth_percent="0.4" />
 
-                    <!-- Inject Button centered below -->
                     <Button
                         android:id="@+id/injectButton"
                         style="?attr/materialButtonOutlinedStyle"
@@ -295,106 +300,71 @@
                     tools:text="Remaining on camera: 10"
                     tools:visibility="visible" />
             </LinearLayout>
+        </ScrollView>
 
-            <!-- TAB 2: CONFIGURATION -->
+        <!-- TAB 2: REMOTE VIEWER -->
+        <LinearLayout
+            android:id="@+id/viewerLayout"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:padding="8dp"
+            android:visibility="gone">
+
+            <!-- Selection and Action Header -->
             <LinearLayout
-                android:id="@+id/settingsLayout"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:visibility="gone">
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingBottom="8dp">
 
-                <TextView
-                    style="@style/TextAppearance.AppCompat.Title"
+                <Button
+                    android:id="@+id/btnSelectAll"
+                    style="?attr/materialButtonOutlinedStyle"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="@string/cam_settings_title" />
+                    android:text="@string/btn_select_all"
+                    android:textSize="12sp" />
 
-                <TextView
-                    android:layout_width="wrap_content"
+                <Button
+                    android:id="@+id/btnDeleteSelected"
+                    style="?attr/materialButtonStyle"
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:text="@string/label_camera_ip" />
-
-                <EditText
-                    android:id="@+id/camIPTxt"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:hint="@string/cam_ip_hint"
-                    android:importantForAutofill="no"
-                    android:inputType="text" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:text="@string/label_camera_ssid" />
-
-                <EditText
-                    android:id="@+id/camSSIDTxt"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:hint="@string/label_access_point"
-                    android:importantForAutofill="no"
-                    android:inputType="text" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:text="@string/label_camera_wifi_pass" />
-
-                <EditText
-                    android:id="@+id/camWifiPassTxt"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:hint="@string/label_access_point_password"
-                    android:importantForAutofill="no"
-                    android:inputType="textPassword" />
-
-                <TextView
-                    style="@style/TextAppearance.AppCompat.Title"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="24dp"
-                    android:text="@string/local_settings_title" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:text="@string/label_local_path" />
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical">
-
-                    <EditText
-                        android:id="@+id/backupPathTxt"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:hint="@string/local_path_hint"
-                        android:importantForAutofill="no"
-                        android:inputType="text" />
-
-                    <Button
-                        android:id="@+id/browseFolderButton"
-                        style="?attr/materialButtonOutlinedStyle"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="8dp"
-                        android:text="@string/btn_browse_folder" />
-                </LinearLayout>
-
+                    android:layout_weight="1"
+                    android:layout_marginStart="8dp"
+                    android:text="@string/btn_delete_selected"
+                    android:textColor="@color/white"
+                    android:textSize="13sp"
+                    app:backgroundTint="@android:color/holo_red_dark" />
             </LinearLayout>
 
-            <Space
+            <ProgressBar
+                android:id="@+id/viewerProgressBar"
+                style="?android:attr/progressBarStyleHorizontal"
                 android:layout_width="match_parent"
-                android:layout_height="64dp" />
+                android:layout_height="wrap_content"
+                android:indeterminate="true"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/emptyViewerTextView"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:gravity="center"
+                android:text="@string/msg_no_remote_files"
+                android:textColor="#B0B0B0"
+                android:textSize="16sp"
+                android:visibility="visible" />
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/remoteFilesRecyclerView"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:visibility="gone" />
 
         </LinearLayout>
-    </ScrollView>
+
+    </FrameLayout>
 </LinearLayout>
