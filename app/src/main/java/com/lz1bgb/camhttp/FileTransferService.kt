@@ -4,14 +4,17 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
+import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.net.Uri
+import android.net.wifi.WifiManager
 import android.os.Binder
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.os.PowerManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.edit
@@ -66,6 +69,15 @@ class FileTransferService : Service() {
     private val isScheduled = AtomicBoolean(false)
     private var nextExecutionTime: Long = 0L
 
+    private var wakeLock: PowerManager.WakeLock? = null
+    private var wifiLock: WifiManager.WifiLock? = null
+
+    private val notificationManager by lazy {
+        getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+    }
+
+    private var lastNotificationTime = 0L
+
     // Binder for communication with Activity
     private val binder = LocalBinder()
 
@@ -75,18 +87,99 @@ class FileTransferService : Service() {
 
     override fun onBind(intent: Intent?): IBinder = binder
 
+    private fun acquireLocks() {
+        try {
+            if (wakeLock == null) {
+                val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+                wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "CamHttp:FileTransferWakeLock")
+                wakeLock?.setReferenceCounted(false)
+            }
+            if (wakeLock?.isHeld == false) {
+                wakeLock?.acquire(30 * 60 * 1000L /* 30 minutes safety timeout */)
+            }
+
+            if (wifiLock == null) {
+                val wifiManager = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+                wifiLock = wifiManager.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "CamHttp:FileTransferWifiLock")
+                wifiLock?.setReferenceCounted(false)
+            }
+            if (wifiLock?.isHeld == false) {
+                wifiLock?.acquire()
+            }
+        } catch (e: Exception) {
+            FileLogger.logToFile(this, "FileService", "Error acquiring locks: ${e.message}")
+        }
+    }
+
+    private fun releaseLocks() {
+        try {
+            if (wakeLock?.isHeld == true) {
+                wakeLock?.release()
+            }
+            if (wifiLock?.isHeld == true) {
+                wifiLock?.release()
+            }
+        } catch (e: Exception) {
+            FileLogger.logToFile(this, "FileService", "Error releasing locks: ${e.message}")
+        }
+    }
+
+    private fun updateNotificationProgress(fileName: String, progress: Int, speed: String) {
+        val now = System.currentTimeMillis()
+        if (now - lastNotificationTime < 500 && progress in 1..99) {
+            return
+        }
+        lastNotificationTime = now
+
+        val contentText = if (fileName.isNotEmpty()) {
+            "$fileName • $speed"
+        } else {
+            getString(R.string.foreground_service_justification)
+        }
+
+        val builder = NotificationCompat.Builder(this, "FileTransferChannel")
+            .setContentTitle(getString(R.string.app_name))
+            .setContentText(contentText)
+            .setSmallIcon(R.drawable.ic_notification_sync)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setOngoing(true)
+
+        if (fileName.isNotEmpty() && progress >= 0) {
+            builder.setProgress(100, progress, false)
+            builder.setSubText("$progress%")
+        }
+
+        try {
+            notificationManager.notify(1, builder.build())
+        } catch (e: Exception) {
+            Log.e("FileService", "Error updating notification: ${e.message}")
+        }
+    }
+
+    private fun resetNotification() {
+        val notification = createNotification()
+        try {
+            notificationManager.notify(1, notification)
+        } catch (e: Exception) {
+            Log.e("FileService", "Error resetting notification: ${e.message}")
+        }
+    }
+
     private val periodicCheck = Runnable {
         // Start the check and transfer cycle
         if (isTaskRunning.compareAndSet(false, true)) {
             nextExecutionTime = 0L // Reset while running
             scope.launch {
                 try {
+                    acquireLocks()
                     FileLogger.logToFile(this@FileTransferService, "FileService", "Starting periodic check...")
                     performTransferCycle()
                 } catch (e: Exception) {
                     FileLogger.logToFile(this@FileTransferService, "FileService", "Error in cycle: ${e.message}")
                     Log.e("FileService", "Error in cycle: ${e.message}")
                 } finally {
+                    releaseLocks()
+                    resetNotification()
                     isTaskRunning.set(false)
                     val prefs = getSharedPreferences("FtpSettings", MODE_PRIVATE)
                     val isCycleCheck = prefs.getBoolean("CYCLE_CHECK_ENABLED", true)
@@ -281,6 +374,7 @@ class FileTransferService : Service() {
                                 if (total > 0) {
                                     currentProgress = ((bytes * 100) / total).toInt()
                                 }
+                                updateNotificationProgress(file.name, currentProgress, currentSpeed)
                             }
                         } else {
                             val localDirFile = if (!customLocalPath.isNullOrEmpty()) {
@@ -296,6 +390,7 @@ class FileTransferService : Service() {
                                 if (total > 0) {
                                     currentProgress = ((bytes * 100) / total).toInt()
                                 }
+                                updateNotificationProgress(file.name, currentProgress, currentSpeed)
                             }
                         }
                         
@@ -513,6 +608,8 @@ class FileTransferService : Service() {
         isTaskRunning.set(false)
         nextExecutionTime = 0L
 
+        releaseLocks()
+
         // Zeroes statistics
         currentFileName = ""
         currentSpeed = ""
@@ -544,6 +641,7 @@ class FileTransferService : Service() {
         // Cancel all active Coroutines
         job.cancel()
 
+        releaseLocks()
         scope.cancel()
         FileLogger.logToFile(this, "FileService", "Service stopped and cleaned up.")
     }
