@@ -154,6 +154,9 @@ class SettingsActivity : AppCompatActivity() {
         val savedLocalPath = prefs.getString("PATH_LOCAL", null) ?: prefs.getString("PATH_SERVER", "")
         dialogBinding.dialogBackupPathTxt.setText(savedLocalPath)
 
+        val autoDeleteEnabled = prefs.getBoolean("AUTO_DELETE_REMOTE", true)
+        dialogBinding.dialogAutoDeleteCheckBox.isChecked = autoDeleteEnabled
+
         dialogBinding.dialogBrowseFolderButton.setOnClickListener {
             openDocumentTreeLauncher.launch(null)
         }
@@ -165,6 +168,7 @@ class SettingsActivity : AppCompatActivity() {
                 prefs.edit {
                     putString("IP_CAM", dialogBinding.dialogCamIPTxt.text.toString())
                     putString("PATH_LOCAL", dialogBinding.dialogBackupPathTxt.text.toString())
+                    putBoolean("AUTO_DELETE_REMOTE", dialogBinding.dialogAutoDeleteCheckBox.isChecked)
                 }
                 Toast.makeText(this, "Settings saved.", Toast.LENGTH_SHORT).show()
                 activeDialogBinding = null

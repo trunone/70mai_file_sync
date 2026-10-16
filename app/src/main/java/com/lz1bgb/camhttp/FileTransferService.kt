@@ -319,15 +319,21 @@ class FileTransferService : Service() {
 
                 // Only delete the group if ALL files in the group were successfully downloaded / already exist locally
                 if (successfullyDownloadedFiles.size == filesInGroup.size) {
-                    FileLogger.logToFile(this, "FileService", "Group $groupKey downloaded/verified successfully. Deleting from camera...")
-                    for (file in successfullyDownloadedFiles) {
-                        val deleted = httpClient.deleteRemoteFile(file.path, file.name, token)
-                        if (deleted) {
-                            FileLogger.logToFile(this, "FileService", "Deleted from camera: ${file.name}")
-                            if (pendingCameraFiles > 0) pendingCameraFiles--
-                        } else {
-                            Log.e("FileService", "Failed to delete ${file.name} from camera.")
+                    val autoDeleteEnabled = prefs.getBoolean("AUTO_DELETE_REMOTE", true)
+                    if (autoDeleteEnabled) {
+                        FileLogger.logToFile(this, "FileService", "Group $groupKey downloaded/verified successfully. Deleting from camera...")
+                        for (file in successfullyDownloadedFiles) {
+                            val deleted = httpClient.deleteRemoteFile(file.path, file.name, token)
+                            if (deleted) {
+                                FileLogger.logToFile(this, "FileService", "Deleted from camera: ${file.name}")
+                                if (pendingCameraFiles > 0) pendingCameraFiles--
+                            } else {
+                                Log.e("FileService", "Failed to delete ${file.name} from camera.")
+                            }
                         }
+                    } else {
+                        FileLogger.logToFile(this, "FileService", "Group $groupKey downloaded/verified successfully. Auto delete disabled, skipping deletion.")
+                        pendingCameraFiles -= filesInGroup.size
                     }
                 } else {
                     FileLogger.logToFile(this, "FileService", "Group $groupKey was NOT fully downloaded (Success: ${successfullyDownloadedFiles.size}/${filesInGroup.size}). Deletion skipped.")

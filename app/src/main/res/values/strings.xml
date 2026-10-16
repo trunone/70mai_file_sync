@@ -17,6 +17,7 @@
     <string name="label_local_path">Local Storage Path</string>
     <string name="local_path_hint">Save path, e.g. /storage/emulated/0/Movies/70mai</string>
     <string name="btn_browse_folder">Select Folder</string>
+    <string name="label_auto_delete">Auto delete remote file after download</string>
     <string name="status_idle">Idle</string>
     <string name="speed_idle">0 KB/s</string>
     <string name="tab_transfer">Transfer</string>
