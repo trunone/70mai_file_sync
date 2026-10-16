@@ -14,7 +14,6 @@ commonsNet = "3.13.0"
 okhttp = "5.3.2"
 lifecycle = "2.10.0"
 documentfile = "1.0.1"
-dokka = "2.2.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -35,4 +34,3 @@ androidx-documentfile = { group = "androidx.documentfile", name = "documentfile"
 android-application = { id = "com.android.application", version.ref = "agp" }
 #kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
-dokka = { id = "org.jetbrains.dokka", version.ref = "dokka" }
