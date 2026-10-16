@@ -6,6 +6,7 @@ import android.app.NotificationManager
 import android.app.Service
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.net.Uri
 import android.os.Binder
 import android.os.Build
 import android.os.Handler
@@ -14,10 +15,12 @@ import android.os.Looper
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.edit
+import androidx.documentfile.provider.DocumentFile
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.concurrent.atomic.AtomicBoolean
 import java.io.File
 import java.util.Locale
@@ -40,7 +43,7 @@ data class ServiceStatus(
 /**
  * @brief Foreground service that orchestrates file transfers from Dashcam (HTTP) to Local Storage.
  * 
- * It periodically checks for the camera Wi-Fi. If found, it downloads new files to the local directory.
+ * It periodically checks for the camera Wi-Fi. If found, it downloads new files to the local directory or document tree.
  */
 class FileTransferService : Service() {
 
@@ -203,39 +206,43 @@ class FileTransferService : Service() {
                 
                 // Remove /mnt/sd for local path
                 val cleanPath = file.path.removePrefix("/mnt/sd").trimStart('/')
-                val localDirFile = if (!customLocalPath.isNullOrEmpty()) {
-                    File(customLocalPath, cleanPath)
-                } else {
-                    File(getExternalFilesDir(null), "camera/$cleanPath")
-                }
-                if (!localDirFile.exists()) localDirFile.mkdirs()
-                
-                val localPath = localDirFile.absolutePath
                 
                 httpClient.registerClient()
                 val startTime = System.currentTimeMillis()
                 
                 try {
-                    val isDownloaded = httpClient.downloadFile(downloadUrl, localPath) { bytes, total ->
-                        updateSpeed(bytes)
-                        if (total > 0) {
-                            currentProgress = ((bytes * 100) / total).toInt()
+                    val isDownloaded = if (!customLocalPath.isNullOrEmpty() && customLocalPath.startsWith("content://")) {
+                        downloadFileToDocumentTree(downloadUrl, customLocalPath, cleanPath, file.name) { bytes, total ->
+                            updateSpeed(bytes)
+                            if (total > 0) {
+                                currentProgress = ((bytes * 100) / total).toInt()
+                            }
+                        }
+                    } else {
+                        val localDirFile = if (!customLocalPath.isNullOrEmpty()) {
+                            File(customLocalPath, cleanPath)
+                        } else {
+                            File(getExternalFilesDir(null), "camera/$cleanPath")
+                        }
+                        if (!localDirFile.exists()) localDirFile.mkdirs()
+                        val localPath = localDirFile.absolutePath
+
+                        httpClient.downloadFile(downloadUrl, localPath) { bytes, total ->
+                            updateSpeed(bytes)
+                            if (total > 0) {
+                                currentProgress = ((bytes * 100) / total).toInt()
+                            }
                         }
                     }
                     
                     val endTime = System.currentTimeMillis()
                     
                     if (isDownloaded) {
-                        val downloadedFile = File(localDirFile, file.name)
-                        if (downloadedFile.exists() && (downloadedFile.length() > 0)) {
-                            Log.i("FileService", "Successfully downloaded: ${file.name}")
-                            val duration = (endTime - startTime) / 1000.0
-                            saveDownloadDuration(duration)
-                            incrementDownloadCount()
-                            successfullyDownloadedFiles.add(file)
-                        } else {
-                            Log.e("FileService", "File ${file.name} is 0 bytes or missing.")
-                        }
+                        Log.i("FileService", "Successfully downloaded: ${file.name}")
+                        val duration = (endTime - startTime) / 1000.0
+                        saveDownloadDuration(duration)
+                        incrementDownloadCount()
+                        successfullyDownloadedFiles.add(file)
                     } else {
                         Log.e("FileService", "Error downloading ${file.name}. Group incomplete.")
                     }
@@ -275,6 +282,85 @@ class FileTransferService : Service() {
         currentProgress = 0
         
         return true
+    }
+
+    private suspend fun downloadFileToDocumentTree(
+        url: String,
+        treeUriString: String,
+        cleanSubPath: String,
+        fileName: String,
+        onProgress: ((Long, Long) -> Unit)? = null
+    ): Boolean {
+        return withContext(Dispatchers.IO) {
+            try {
+                val treeUri = Uri.parse(treeUriString)
+                val rootDoc = DocumentFile.fromTreeUri(this@FileTransferService, treeUri)
+                    ?: return@withContext false
+
+                if (!rootDoc.canWrite()) {
+                    FileLogger.logToFile(this@FileTransferService, "FileService", "Cannot write to selected folder Uri.")
+                    return@withContext false
+                }
+
+                var currentDir = rootDoc
+                val subFolders = cleanSubPath.split('/').filter { it.isNotEmpty() }
+                for (folderName in subFolders) {
+                    val existing = currentDir.findFile(folderName)
+                    currentDir = if (existing != null && existing.isDirectory) {
+                        existing
+                    } else {
+                        currentDir.createDirectory(folderName) ?: return@withContext false
+                    }
+                }
+
+                var targetDoc = currentDir.findFile(fileName)
+                if (targetDoc == null) {
+                    val mimeType = when {
+                        fileName.endsWith(".mp4", ignoreCase = true) -> "video/mp4"
+                        fileName.endsWith(".jpg", ignoreCase = true) || fileName.endsWith(".jpeg", ignoreCase = true) -> "image/jpeg"
+                        else -> "application/octet-stream"
+                    }
+                    targetDoc = currentDir.createFile(mimeType, fileName) ?: return@withContext false
+                }
+
+                val request = okhttp3.Request.Builder().url(url).build()
+                val activeClient = httpClient.getOkHttpClientForUrl(url)
+                val response = activeClient.newCall(request).execute()
+
+                if (!response.isSuccessful) {
+                    response.close()
+                    return@withContext false
+                }
+
+                val body = response.body ?: run {
+                    response.close()
+                    return@withContext false
+                }
+
+                val totalBytes = body.contentLength()
+                var bytesDownloaded = 0L
+
+                body.use { responseBody ->
+                    responseBody.byteStream().use { inputStream ->
+                        contentResolver.openOutputStream(targetDoc.uri)?.use { outputStream ->
+                            val buffer = ByteArray(65536)
+                            var bytesRead: Int
+                            while (inputStream.read(buffer).also { bytesRead = it } != -1) {
+                                outputStream.write(buffer, 0, bytesRead)
+                                bytesDownloaded += bytesRead
+                                onProgress?.invoke(bytesDownloaded, totalBytes)
+                            }
+                        } ?: return@withContext false
+                    }
+                }
+
+                return@withContext bytesDownloaded > 0
+            } catch (e: Exception) {
+                FileLogger.logToFile(this@FileTransferService, "FileService", "DocumentTree download error: ${e.message}")
+                e.printStackTrace()
+                false
+            }
+        }
     }
 
     private fun resetSpeed() {

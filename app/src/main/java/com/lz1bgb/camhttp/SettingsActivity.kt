@@ -80,6 +80,24 @@ class SettingsActivity : AppCompatActivity() {
             Toast.makeText(this, "Location permission is required for Wi-Fi", Toast.LENGTH_LONG).show()
         }
     }
+
+    private val openDocumentTreeLauncher = registerForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        if (uri != null) {
+            val takeFlags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            try {
+                contentResolver.takePersistableUriPermission(uri, takeFlags)
+            } catch (e: Exception) {
+                FileLogger.logToFile(this, "SettingsActivity", "Failed to take persistable Uri permission: ${e.message}")
+            }
+            binding.backupPathTxt.setText(uri.toString())
+            getSharedPreferences("FtpSettings", MODE_PRIVATE).edit {
+                putString("PATH_LOCAL", uri.toString())
+            }
+            Toast.makeText(this, "Folder selected", Toast.LENGTH_SHORT).show()
+        }
+    }
     
     private val updateTask = object : Runnable {
         override fun run() {
@@ -202,6 +220,10 @@ class SettingsActivity : AppCompatActivity() {
         val initialTotalDownloads = statsPrefs.getInt("TOTAL_DOWNLOADS", 0)
         binding.totalFilesDownloadedTextView.text = getString(R.string.label_total_downloaded, initialTotalDownloads)
         binding.totalFilesDownloadedTextView.visibility = View.VISIBLE
+
+        binding.browseFolderButton.setOnClickListener {
+            openDocumentTreeLauncher.launch(null)
+        }
 
         /**
          * Toggle button logic for Start/Stop

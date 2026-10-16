@@ -365,13 +365,29 @@
                     android:layout_marginTop="8dp"
                     android:text="@string/label_local_path" />
 
-                <EditText
-                    android:id="@+id/backupPathTxt"
+                <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:hint="@string/local_path_hint"
-                    android:importantForAutofill="no"
-                    android:inputType="text" />
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <EditText
+                        android:id="@+id/backupPathTxt"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:hint="@string/local_path_hint"
+                        android:importantForAutofill="no"
+                        android:inputType="text" />
+
+                    <Button
+                        android:id="@+id/browseFolderButton"
+                        style="?attr/materialButtonOutlinedStyle"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:text="@string/btn_browse_folder" />
+                </LinearLayout>
 
             </LinearLayout>
 

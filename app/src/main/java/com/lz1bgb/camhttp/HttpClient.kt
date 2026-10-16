@@ -83,15 +83,26 @@ class HttpClient(context: Context) {
     private val json = Json { ignoreUnknownKeys = true }
 
     /**
+     * @brief Gets active OkHttpClient bound for camera network or default network.
+     */
+    fun getOkHttpClientForUrl(url: String): OkHttpClient {
+        return if (url.contains(cameraIp) && cameraClient != null) {
+            cameraClient!!
+        } else {
+            client
+        }
+    }
+
+    /**
      * @brief Persisted session token obtained after pairing.
      */
     var sessionToken: String?
         get() {
-            val prefs = appContext?.getSharedPreferences("CamSettings", Context.MODE_PRIVATE)
+            val prefs = appContext.getSharedPreferences("CamSettings", Context.MODE_PRIVATE)
             return prefs?.getString("SESSION_TOKEN", null)
         }
         set(value) {
-            val prefs = appContext?.getSharedPreferences("CamSettings", Context.MODE_PRIVATE)
+            val prefs = appContext.getSharedPreferences("CamSettings", Context.MODE_PRIVATE)
             prefs?.edit {
                 putString("SESSION_TOKEN", value)
             }
@@ -103,7 +114,7 @@ class HttpClient(context: Context) {
      */
     val cameraIp: String
         get() {
-            val prefs = appContext?.getSharedPreferences("FtpSettings", Context.MODE_PRIVATE)
+            val prefs = appContext.getSharedPreferences("FtpSettings", Context.MODE_PRIVATE)
             return prefs?.getString("IP_CAM", "192.168.0.1") ?: "192.168.0.1"
         }
 
@@ -227,13 +238,7 @@ class HttpClient(context: Context) {
             try {
                 val request = Request.Builder().url(url).build()
                 
-                // Use cameraClient for requests to camera address
-                val activeClient = if (url.contains(cameraIp) && cameraClient != null) {
-                    cameraClient!!
-                } else {
-                    client
-                }
-
+                val activeClient = getOkHttpClientForUrl(url)
                 val response = activeClient.newCall(request).execute()
 
                 if (response.isSuccessful) {
@@ -277,13 +282,7 @@ class HttpClient(context: Context) {
                 val request = Request.Builder().url(url).build()
                 FileLogger.logToFile(appContext, "HttpClient", "Downloading from URL: $url")
                 
-                // Use cameraClient for downloads from camera
-                val activeClient = if (url.contains(cameraIp) && cameraClient != null) {
-                    cameraClient!!
-                } else {
-                    client
-                }
-                
+                val activeClient = getOkHttpClientForUrl(url)
                 val response = activeClient.newCall(request).execute()
 
                 if (!response.isSuccessful) {
@@ -302,12 +301,11 @@ class HttpClient(context: Context) {
                 val totalBytes = body.contentLength()
                 var bytesDownloaded = 0L
 
-                // 5. Saving file to disk
-                // .use automatically closes body (which also closes response)
+                // Saving file to disk
                 body.use { responseBody ->
                     responseBody.byteStream().use { inputStream ->
                         FileOutputStream(destinationFile).use { outputStream ->
-                            val buffer = ByteArray(65536) // Increased buffer (64KB) for stable transfer
+                            val buffer = ByteArray(65536) // 64KB buffer
                             var bytesRead: Int
                             while (inputStream.read(buffer).also { bytesRead = it } != -1) {
                                 outputStream.write(buffer, 0, bytesRead)
@@ -325,7 +323,6 @@ class HttpClient(context: Context) {
                 e.printStackTrace()
                 return@withContext false
             } catch (e: SecurityException) {
-                // We may not have write permissions for this folder
                 FileLogger.logToFile(appContext, "HttpClient", "Download file SecurityException: ${e.message}")
                 e.printStackTrace()
                 return@withContext false
@@ -345,8 +342,6 @@ class HttpClient(context: Context) {
                 val dhcp = dhcpServerIpAddress ?: cameraIp
                 val token = sessionToken ?: return@withContext false
                 val timestamp = System.currentTimeMillis() / 1000L
-                // Inverse logic according to requirement: 
-                // enable=0 to enable access (album), enable=1 for recording
                 val enableValue = if (enable) 0 else 1
                 
                 val queryPath = "setaccessalbum.cgi?"
@@ -357,7 +352,6 @@ class HttpClient(context: Context) {
                 val response = executeRequest(url)
                 
                 FileLogger.logToFile(appContext, "HttpClient", "Set album mode response: $response")
-                // Camera returns ResultCode 0 on success
                 response?.contains("\"ResultCode\":0") == true || response?.contains("\"ResultCode\":\"0\"") == true
             } catch (e: Exception) {
                 FileLogger.logToFile(appContext, "HttpClient", "Delete remote file error: ${e.message}")
@@ -461,11 +455,9 @@ class HttpClient(context: Context) {
                 val dhcp = dhcpServerIpAddress ?: cameraIp
                 val timestamp = System.currentTimeMillis() / 1000L
                 
-                // Form the URL_Query for deletion according to the specification
                 val queryPath = "delete.cgi?"
                 val queryParams = "&-path=$path&-name=$name&-timestamp=$timestamp"
                 
-                // Generate the signkey: MD5(URI + Params + Token)
                 val sign = generateSignKey(queryPath + queryParams, token)
                 
                 val url = "http://$dhcp/cgi-bin/$queryPath$queryParams&-signkey=$sign"
