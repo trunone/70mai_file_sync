@@ -4,14 +4,17 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
+import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.net.Uri
+import android.net.wifi.WifiManager
 import android.os.Binder
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.os.PowerManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.edit
@@ -66,6 +69,15 @@ class FileTransferService : Service() {
     private val isScheduled = AtomicBoolean(false)
     private var nextExecutionTime: Long = 0L
 
+    private var wakeLock: PowerManager.WakeLock? = null
+    private var wifiLock: WifiManager.WifiLock? = null
+
+    private val notificationManager by lazy {
+        getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+    }
+
+    private var lastNotificationTime = 0L
+
     // Binder for communication with Activity
     private val binder = LocalBinder()
 
@@ -75,26 +87,111 @@ class FileTransferService : Service() {
 
     override fun onBind(intent: Intent?): IBinder = binder
 
+    private fun acquireLocks() {
+        try {
+            if (wakeLock == null) {
+                val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+                wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "CamHttp:FileTransferWakeLock")
+                wakeLock?.setReferenceCounted(false)
+            }
+            if (wakeLock?.isHeld == false) {
+                wakeLock?.acquire(30 * 60 * 1000L /* 30 minutes safety timeout */)
+            }
+
+            if (wifiLock == null) {
+                val wifiManager = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+                wifiLock = wifiManager.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "CamHttp:FileTransferWifiLock")
+                wifiLock?.setReferenceCounted(false)
+            }
+            if (wifiLock?.isHeld == false) {
+                wifiLock?.acquire()
+            }
+        } catch (e: Exception) {
+            Log.e("FileService", "Error acquiring locks: ${e.message}")
+        }
+    }
+
+    private fun releaseLocks() {
+        try {
+            if (wakeLock?.isHeld == true) {
+                wakeLock?.release()
+            }
+            if (wifiLock?.isHeld == true) {
+                wifiLock?.release()
+            }
+        } catch (e: Exception) {
+            Log.e("FileService", "Error releasing locks: ${e.message}")
+        }
+    }
+
+    private fun updateNotificationProgress(fileName: String, progress: Int, speed: String) {
+        val now = System.currentTimeMillis()
+        if (now - lastNotificationTime < 500 && progress in 1..99) {
+            return
+        }
+        lastNotificationTime = now
+
+        val contentText = if (fileName.isNotEmpty()) {
+            "$fileName • $speed"
+        } else {
+            getString(R.string.foreground_service_justification)
+        }
+
+        val builder = NotificationCompat.Builder(this, "FileTransferChannel")
+            .setContentTitle(getString(R.string.app_name))
+            .setContentText(contentText)
+            .setSmallIcon(R.drawable.ic_notification_sync)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setOngoing(true)
+
+        if (fileName.isNotEmpty() && progress >= 0) {
+            builder.setProgress(100, progress, false)
+            builder.setSubText("$progress%")
+        }
+
+        try {
+            notificationManager.notify(1, builder.build())
+        } catch (e: Exception) {
+            Log.e("FileService", "Error updating notification: ${e.message}")
+        }
+    }
+
+    private fun resetNotification() {
+        val notification = createNotification()
+        try {
+            notificationManager.notify(1, notification)
+        } catch (e: Exception) {
+            Log.e("FileService", "Error resetting notification: ${e.message}")
+        }
+    }
+
     private val periodicCheck = Runnable {
         // Start the check and transfer cycle
         if (isTaskRunning.compareAndSet(false, true)) {
             nextExecutionTime = 0L // Reset while running
             scope.launch {
                 try {
-                    FileLogger.logToFile(this@FileTransferService, "FileService", "Starting periodic check...")
+                    acquireLocks()
+                    Log.d("FileService", "Starting periodic check...")
                     performTransferCycle()
                 } catch (e: Exception) {
-                    FileLogger.logToFile(this@FileTransferService, "FileService", "Error in cycle: ${e.message}")
                     Log.e("FileService", "Error in cycle: ${e.message}")
                 } finally {
+                    releaseLocks()
+                    resetNotification()
                     isTaskRunning.set(false)
-                    if (job.isActive) {
+                    val prefs = getSharedPreferences("FtpSettings", MODE_PRIVATE)
+                    val isCycleCheck = prefs.getBoolean("CYCLE_CHECK_ENABLED", true)
+                    if (job.isActive && isCycleCheck) {
                         scheduleNextRun()
+                    } else if (!isCycleCheck) {
+                        Log.i("FileService", "One-time check completed. Stopping service.")
+                        stopSelf()
                     }
                 }
             }
         } else {
-            FileLogger.logToFile(this, "FileService", "Skip check - task still running.")
+            Log.d("FileService", "Skip check - task still running.")
         }
     }
 
@@ -113,7 +210,7 @@ class FileTransferService : Service() {
 
         // Try HTTP (Camera) if connected
         if (dhcp == camIp) {
-            FileLogger.logToFile(this, "FileService", "Camera detected ($camIp). Starting HTTP cycle.")
+            Log.i("FileService", "Camera detected ($camIp). Starting HTTP cycle.")
             val success = runHttpCycle()
             if (success) {
                 updateStatus(getString(R.string.msg_http_success), "SUCCESS")
@@ -121,7 +218,7 @@ class FileTransferService : Service() {
                 updateStatus(getString(R.string.msg_http_error), "ERROR")
             }
         } else {
-            FileLogger.logToFile(this, "FileService", "Camera network not detected.")
+            Log.i("FileService", "Camera network not detected.")
             pendingCameraFiles = 0
             updateStatus(getString(R.string.msg_camera_not_found), "IDLE")
         }
@@ -168,7 +265,7 @@ class FileTransferService : Service() {
         
         // If no token, attempt pairing
         if (token == null) {
-            FileLogger.logToFile(this, "FileService", "No token. Starting pairing...")
+            Log.i("FileService", "No token. Starting pairing...")
             val authSuccess = httpAuth.performAuthenticationLogic()
             if (!authSuccess) return false
             token = httpClient.sessionToken ?: return false
@@ -181,7 +278,7 @@ class FileTransferService : Service() {
         try {
             // Enable Album Mode to pause video recording and unlock full file list/access on SD card
             albumModeActive = httpClient.setAlbumMode(true)
-            FileLogger.logToFile(this, "FileService", "Album Mode enabled: $albumModeActive")
+            Log.d("FileService", "Album Mode enabled: $albumModeActive")
 
             // Wait 2 seconds for camera hardware to pause recording and initialize album file index
             kotlinx.coroutines.delay(2000)
@@ -193,7 +290,7 @@ class FileTransferService : Service() {
             for (type in fileTypes) {
                 val files = httpClient.getFileList(type)
                 if (files != null) {
-                    FileLogger.logToFile(this, "FileService", "Type $type: Found ${files.size} files.")
+                    Log.d("FileService", "Type $type: Found ${files.size} files.")
                     
                     val typeFiles = if (type in listOf(0, 1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12)) {
                         if (albumModeActive) {
@@ -203,7 +300,7 @@ class FileTransferService : Service() {
                             // Fallback if album mode was inactive: exclude only the 1 latest active file
                             files.sortedBy { it.name }.dropLast(1)
                         } else {
-                            FileLogger.logToFile(this, "FileService", "Type $type has only 1 file and Album Mode is inactive. Waiting for finalization.")
+                            Log.d("FileService", "Type $type has only 1 file and Album Mode is inactive. Waiting for finalization.")
                             emptyList()
                         }
                     } else {
@@ -215,7 +312,7 @@ class FileTransferService : Service() {
             }
 
             if (allFiles.isEmpty()) {
-                FileLogger.logToFile(this, "FileService", "No new ready files for download.")
+                Log.i("FileService", "No new ready files for download.")
                 return true
             }
 
@@ -236,13 +333,13 @@ class FileTransferService : Service() {
             }
 
             for ((groupKey, filesInGroup) in groupedFiles) {
-                FileLogger.logToFile(this, "FileService", "Processing group $groupKey with files: ${filesInGroup.joinToString { it.name }}")
+                Log.d("FileService", "Processing group $groupKey with files: ${filesInGroup.joinToString { it.name }}")
                 
                 val successfullyDownloadedFiles = mutableListOf<FileInfo>()
                 var networkErrorOccurred = false
 
                 for (file in filesInGroup) {
-                    FileLogger.logToFile(this, "FileService", "Checking ${file.name} (Path: ${file.path})")
+                    Log.d("FileService", "Checking ${file.name} (Path: ${file.path})")
                     val parentFolder = file.path.substringAfterLast('/').ifEmpty { file.path }
                     currentFileName = "$parentFolder/${file.name}"
 
@@ -256,7 +353,6 @@ class FileTransferService : Service() {
 
                     // Check if file already exists locally
                     if (isLocalFileExisting(customLocalPath, cleanPath, file.name, file.size)) {
-                        FileLogger.logToFile(this, "FileService", "File ${file.name} already exists locally. Skipping download.")
                         Log.i("FileService", "File ${file.name} already exists locally. Skipping download.")
                         successfullyDownloadedFiles.add(file)
                         continue
@@ -276,6 +372,7 @@ class FileTransferService : Service() {
                                 if (total > 0) {
                                     currentProgress = ((bytes * 100) / total).toInt()
                                 }
+                                updateNotificationProgress(file.name, currentProgress, currentSpeed)
                             }
                         } else {
                             val localDirFile = if (!customLocalPath.isNullOrEmpty()) {
@@ -291,6 +388,7 @@ class FileTransferService : Service() {
                                 if (total > 0) {
                                     currentProgress = ((bytes * 100) / total).toInt()
                                 }
+                                updateNotificationProgress(file.name, currentProgress, currentSpeed)
                             }
                         }
                         
@@ -306,31 +404,37 @@ class FileTransferService : Service() {
                             Log.e("FileService", "Error downloading ${file.name}. Group incomplete.")
                         }
                     } catch (e: Exception) {
-                        FileLogger.logToFile(this, "FileService", "Critical download error: ${e.message}")
+                        Log.e("FileService", "Critical download error: ${e.message}")
                         networkErrorOccurred = true
                         break // Stop processing this group
                     }
                 }
 
                 if (networkErrorOccurred) {
-                    FileLogger.logToFile(this, "FileService", "Network error detected. Aborting cycle.")
+                    Log.e("FileService", "Network error detected. Aborting cycle.")
                     break // Stop all groups
                 }
 
                 // Only delete the group if ALL files in the group were successfully downloaded / already exist locally
                 if (successfullyDownloadedFiles.size == filesInGroup.size) {
-                    FileLogger.logToFile(this, "FileService", "Group $groupKey downloaded/verified successfully. Deleting from camera...")
-                    for (file in successfullyDownloadedFiles) {
-                        val deleted = httpClient.deleteRemoteFile(file.path, file.name, token)
-                        if (deleted) {
-                            FileLogger.logToFile(this, "FileService", "Deleted from camera: ${file.name}")
-                            if (pendingCameraFiles > 0) pendingCameraFiles--
-                        } else {
-                            Log.e("FileService", "Failed to delete ${file.name} from camera.")
+                    val autoDeleteEnabled = prefs.getBoolean("AUTO_DELETE_REMOTE", true)
+                    if (autoDeleteEnabled) {
+                        Log.i("FileService", "Group $groupKey downloaded/verified successfully. Deleting from camera...")
+                        for (file in successfullyDownloadedFiles) {
+                            val deleted = httpClient.deleteRemoteFile(file.path, file.name, token)
+                            if (deleted) {
+                                Log.i("FileService", "Deleted from camera: ${file.name}")
+                                if (pendingCameraFiles > 0) pendingCameraFiles--
+                            } else {
+                                Log.e("FileService", "Failed to delete ${file.name} from camera.")
+                            }
                         }
+                    } else {
+                        Log.i("FileService", "Group $groupKey downloaded/verified successfully. Auto delete disabled, skipping deletion.")
+                        pendingCameraFiles -= filesInGroup.size
                     }
                 } else {
-                    FileLogger.logToFile(this, "FileService", "Group $groupKey was NOT fully downloaded (Success: ${successfullyDownloadedFiles.size}/${filesInGroup.size}). Deletion skipped.")
+                    Log.w("FileService", "Group $groupKey was NOT fully downloaded (Success: ${successfullyDownloadedFiles.size}/${filesInGroup.size}). Deletion skipped.")
                     // Update pending count by removing processed group from the count to reflect UI correctly
                     pendingCameraFiles -= filesInGroup.size
                 }
@@ -343,7 +447,7 @@ class FileTransferService : Service() {
         } finally {
             if (albumModeActive) {
                 val albumModeOff = httpClient.setAlbumMode(false)
-                FileLogger.logToFile(this, "FileService", "Resuming camera recording (Album Mode off): $albumModeOff")
+                Log.d("FileService", "Resuming camera recording (Album Mode off): $albumModeOff")
             }
         }
     }
@@ -362,7 +466,7 @@ class FileTransferService : Service() {
                     ?: return@withContext false
 
                 if (!rootDoc.canWrite()) {
-                    FileLogger.logToFile(this@FileTransferService, "FileService", "Cannot write to selected folder Uri.")
+                    Log.e("FileService", "Cannot write to selected folder Uri.")
                     return@withContext false
                 }
 
@@ -420,7 +524,7 @@ class FileTransferService : Service() {
 
                 return@withContext bytesDownloaded > 0
             } catch (e: Exception) {
-                FileLogger.logToFile(this@FileTransferService, "FileService", "DocumentTree download error: ${e.message}")
+                Log.e("FileService", "DocumentTree download error: ${e.message}")
                 e.printStackTrace()
                 false
             }
@@ -482,7 +586,7 @@ class FileTransferService : Service() {
         nextExecutionTime = System.currentTimeMillis() + checkInterval
         isScheduled.set(true)
         handler.postDelayed(periodicCheck, checkInterval)
-        FileLogger.logToFile(this, "FileService", "Next check scheduled.")
+        Log.d("FileService", "Next check scheduled.")
     }
 
     override fun onCreate() {
@@ -501,6 +605,8 @@ class FileTransferService : Service() {
         job.cancel() 
         isTaskRunning.set(false)
         nextExecutionTime = 0L
+
+        releaseLocks()
 
         // Zeroes statistics
         currentFileName = ""
@@ -521,7 +627,7 @@ class FileTransferService : Service() {
         job = SupervisorJob()
         scope = CoroutineScope(Dispatchers.IO + job)
         
-        FileLogger.logToFile(this, "FileService", "Transfer manually stopped and reset.")
+        Log.i("FileService", "Transfer manually stopped and reset.")
     }
 
     override fun onDestroy() {
@@ -533,8 +639,9 @@ class FileTransferService : Service() {
         // Cancel all active Coroutines
         job.cancel()
 
+        releaseLocks()
         scope.cancel()
-        FileLogger.logToFile(this, "FileService", "Service stopped and cleaned up.")
+        Log.i("FileService", "Service stopped and cleaned up.")
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -553,8 +660,15 @@ class FileTransferService : Service() {
         if (!isTaskRunning.get() && !isScheduled.get()) {
             handler.removeCallbacks(periodicCheck)
             isScheduled.set(true)
-            nextExecutionTime = System.currentTimeMillis() + checkInterval
-            handler.postDelayed(periodicCheck, checkInterval)
+            val prefs = getSharedPreferences("FtpSettings", MODE_PRIVATE)
+            val isCycleCheck = prefs.getBoolean("CYCLE_CHECK_ENABLED", true)
+            if (isCycleCheck) {
+                nextExecutionTime = System.currentTimeMillis() + checkInterval
+                handler.postDelayed(periodicCheck, checkInterval)
+            } else {
+                nextExecutionTime = System.currentTimeMillis()
+                handler.post(periodicCheck)
+            }
         }
 
         return START_STICKY

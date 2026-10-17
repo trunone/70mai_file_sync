@@ -43,9 +43,6 @@ class SettingsActivity : AppCompatActivity() {
     private var fileTransferService: FileTransferService? = null
     private var isBound = false
 
-    private var isModeActive = false
-    private var isAlbumActive = false
-    
     private var manualServiceState: Boolean? = null
     private var activeDialogBinding: DialogSettingsBinding? = null
 
@@ -80,7 +77,7 @@ class SettingsActivity : AppCompatActivity() {
             try {
                 contentResolver.takePersistableUriPermission(uri, takeFlags)
             } catch (e: Exception) {
-                FileLogger.logToFile(this, "SettingsActivity", "Failed to take persistable Uri permission: ${e.message}")
+                android.util.Log.e("SettingsActivity", "Failed to take persistable Uri permission: ${e.message}")
             }
             activeDialogBinding?.dialogBackupPathTxt?.setText(uri.toString())
             getSharedPreferences("FtpSettings", MODE_PRIVATE).edit {
@@ -95,16 +92,6 @@ class SettingsActivity : AppCompatActivity() {
             refreshServiceStatus()
             handler.postDelayed(this, 5000) 
         }
-    }
-
-    fun activateKeepScreenOn() {
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        FileLogger.logToFile(this, "SettingsActivity", "Keep Screen On: ACTIVATED")
-    }
-
-    fun deactivateKeepScreenOn() {
-        window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        FileLogger.logToFile(this, "SettingsActivity", "Keep Screen On: DEACTIVATED")
     }
 
     override fun onStop() {
@@ -154,6 +141,12 @@ class SettingsActivity : AppCompatActivity() {
         val savedLocalPath = prefs.getString("PATH_LOCAL", null) ?: prefs.getString("PATH_SERVER", "")
         dialogBinding.dialogBackupPathTxt.setText(savedLocalPath)
 
+        val autoDeleteEnabled = prefs.getBoolean("AUTO_DELETE_REMOTE", true)
+        dialogBinding.dialogAutoDeleteCheckBox.isChecked = autoDeleteEnabled
+
+        val cycleCheckEnabled = prefs.getBoolean("CYCLE_CHECK_ENABLED", true)
+        dialogBinding.dialogCycleCheckCheckBox.isChecked = cycleCheckEnabled
+
         dialogBinding.dialogBrowseFolderButton.setOnClickListener {
             openDocumentTreeLauncher.launch(null)
         }
@@ -165,6 +158,8 @@ class SettingsActivity : AppCompatActivity() {
                 prefs.edit {
                     putString("IP_CAM", dialogBinding.dialogCamIPTxt.text.toString())
                     putString("PATH_LOCAL", dialogBinding.dialogBackupPathTxt.text.toString())
+                    putBoolean("AUTO_DELETE_REMOTE", dialogBinding.dialogAutoDeleteCheckBox.isChecked)
+                    putBoolean("CYCLE_CHECK_ENABLED", dialogBinding.dialogCycleCheckCheckBox.isChecked)
                 }
                 Toast.makeText(this, "Settings saved.", Toast.LENGTH_SHORT).show()
                 activeDialogBinding = null
@@ -272,7 +267,7 @@ class SettingsActivity : AppCompatActivity() {
                     try {
                         unbindService(serviceConnection)
                     } catch (e: Exception) {
-                        FileLogger.logToFile(this@SettingsActivity,"Activity", "Unbind error: ${e.message}")
+                        android.util.Log.e("Activity", "Unbind error: ${e.message}")
                     }
                     isBound = false
                     fileTransferService = null
@@ -302,57 +297,8 @@ class SettingsActivity : AppCompatActivity() {
             Toast.makeText(this, "Token Reset. New pairing required.", Toast.LENGTH_SHORT).show()
         }
 
-        binding.albumButton.setOnClickListener {
-            lifecycleScope.launch {
-                isAlbumActive = !isAlbumActive
-                val success = httpClient.setAlbumMode(isAlbumActive)
-                if (success) {
-                    if (isAlbumActive) {
-                        binding.albumButton.setBackgroundColor(ContextCompat.getColor(this@SettingsActivity, android.R.color.holo_blue_dark))
-                        binding.albumButton.setTextColor(Color.WHITE)
-                        Toast.makeText(this@SettingsActivity, "Album Mode (File Access) ON", Toast.LENGTH_SHORT).show()
-                    } else {
-                        binding.albumButton.setBackgroundColor(Color.TRANSPARENT)
-                        binding.albumButton.setTextColor(ContextCompat.getColor(this@SettingsActivity, R.color.white))
-                        Toast.makeText(this@SettingsActivity, "Recording Mode (Camera filming) ON", Toast.LENGTH_SHORT).show()
-                    }
-                } else {
-                    isAlbumActive = !isAlbumActive 
-                    Toast.makeText(this@SettingsActivity, "Error changing mode", Toast.LENGTH_SHORT).show()
-                }
-            }
-        }
-
-        binding.injectButton.setOnClickListener {
-            lifecycleScope.launch {
-                val success = httpClient.injectFTP()
-                if (success) {
-                    Toast.makeText(this@SettingsActivity, "Command SUCCESS", Toast.LENGTH_SHORT).show()
-                    FileLogger.logToFile(this@SettingsActivity, "SettingsActivity", "Inject command: SUCCESS")
-                } else {
-                    Toast.makeText(this@SettingsActivity, "Command FAILED", Toast.LENGTH_SHORT).show()
-                    FileLogger.logToFile(this@SettingsActivity, "SettingsActivity", "Inject command: FAILED")
-                }
-            }
-        }
-
         binding.connectWifiButton.setOnClickListener {
             startActivity(Intent(Settings.ACTION_WIFI_SETTINGS))
-        }
-
-        binding.sleepButton.setOnClickListener {
-            isModeActive = !isModeActive
-            if (isModeActive) {
-                activateKeepScreenOn()
-                binding.sleepButton.setBackgroundColor(ContextCompat.getColor(this, android.R.color.holo_red_dark))
-                binding.sleepButton.setTextColor(Color.WHITE)
-                Toast.makeText(this, "Keep Screen On: ACTIVE", Toast.LENGTH_SHORT).show()
-            } else {
-                deactivateKeepScreenOn()
-                binding.sleepButton.setBackgroundColor(Color.TRANSPARENT)
-                binding.sleepButton.setTextColor(ContextCompat.getColor(this, R.color.white))
-                Toast.makeText(this, "Keep Screen On: OFF", Toast.LENGTH_SHORT).show()
-            }
         }
     }
 

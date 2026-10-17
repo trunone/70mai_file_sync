@@ -5,11 +5,7 @@
     <string name="btn_stat">Statistics</string>
     <string name="btn_token">Token</string>
     <string name="btn_stop">Stop</string>
-    <string name="btn_no_sleep">No Sleep</string>
-    <string name="btn_album">Album Mode</string>
-    <string name="btn_inject">Inject</string>
     <string name="label_reset">Reset</string>
-    <string name="label_functions">Functions</string>
     <string name="label_network">Network</string>
     <string name="cam_settings_title">Camera Settings</string>
     <string name="cam_ip_hint">e.g. 192.168.1.1</string>
@@ -17,6 +13,8 @@
     <string name="label_local_path">Local Storage Path</string>
     <string name="local_path_hint">Save path, e.g. /storage/emulated/0/Movies/70mai</string>
     <string name="btn_browse_folder">Select Folder</string>
+    <string name="label_auto_delete">Auto delete remote file after download</string>
+    <string name="label_cycle_check">Cycle check (repeat automatically)</string>
     <string name="status_idle">Idle</string>
     <string name="speed_idle">0 KB/s</string>
     <string name="tab_transfer">Transfer</string>

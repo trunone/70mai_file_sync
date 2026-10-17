@@ -120,58 +120,6 @@
                         app:layout_constraintStart_toEndOf="@+id/clrCount"
                         app:layout_constraintTop_toTopOf="@+id/clrCount" />
 
-                    <!-- Functions Section -->
-                    <TextView
-                        android:id="@+id/functionsLabel"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="16dp"
-                        android:text="@string/label_functions"
-                        android:textColor="#B0B0B0"
-                        android:textSize="12sp"
-                        android:textStyle="bold"
-                        app:layout_constraintStart_toStartOf="parent"
-                        app:layout_constraintEnd_toEndOf="parent"
-                        app:layout_constraintTop_toBottomOf="@id/clrCount" />
-
-                    <Button
-                        android:id="@+id/sleepButton"
-                        style="?attr/materialButtonOutlinedStyle"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="4dp"
-                        android:layout_marginEnd="4dp"
-                        android:text="@string/btn_no_sleep"
-                        app:layout_constraintEnd_toStartOf="@+id/albumButton"
-                        app:layout_constraintHorizontal_chainStyle="packed"
-                        app:layout_constraintStart_toStartOf="parent"
-                        app:layout_constraintTop_toBottomOf="@id/functionsLabel"
-                        app:layout_constraintWidth_percent="0.4" />
-
-                    <Button
-                        android:id="@+id/albumButton"
-                        style="?attr/materialButtonOutlinedStyle"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="4dp"
-                        android:text="@string/btn_album"
-                        app:layout_constraintBottom_toBottomOf="@+id/sleepButton"
-                        app:layout_constraintEnd_toEndOf="parent"
-                        app:layout_constraintStart_toEndOf="@+id/sleepButton"
-                        app:layout_constraintTop_toTopOf="@+id/sleepButton"
-                        app:layout_constraintWidth_percent="0.4" />
-
-                    <Button
-                        android:id="@+id/injectButton"
-                        style="?attr/materialButtonOutlinedStyle"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
-                        android:text="@string/btn_inject"
-                        app:layout_constraintEnd_toEndOf="parent"
-                        app:layout_constraintStart_toStartOf="parent"
-                        app:layout_constraintTop_toBottomOf="@id/sleepButton" />
-
                     <!-- Network Section -->
                     <TextView
                         android:id="@+id/networkLabel"
@@ -184,7 +132,7 @@
                         android:textStyle="bold"
                         app:layout_constraintStart_toStartOf="parent"
                         app:layout_constraintEnd_toEndOf="parent"
-                        app:layout_constraintTop_toBottomOf="@id/injectButton" />
+                        app:layout_constraintTop_toBottomOf="@id/clrCount" />
 
                     <Button
                         android:id="@+id/connectWifiButton"

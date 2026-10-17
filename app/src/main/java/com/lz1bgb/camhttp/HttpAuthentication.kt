@@ -72,7 +72,7 @@ class HttpAuthentication(private val httpClient: HttpClient) {
             var confirmed = false
             for (i in 1..20) { // Try for ~100 seconds
                 val confirmResponse = httpClient.executeRequest(confirmUrl)
-                FileLogger.logToFile(httpClient.appContext, "HttpAuth", "Attempt $i/20 - Response: $confirmResponse")
+                Log.d("HttpAuth", "Attempt $i/20 - Response: $confirmResponse")
 
                 if (confirmResponse != null && 
                     ((confirmResponse.contains("\"ResultCode\":0") || confirmResponse.contains("\"ResultCode\":\"0\"")))) {
@@ -82,10 +82,10 @@ class HttpAuthentication(private val httpClient: HttpClient) {
                     val finalToken = extractJsonValue(confirmResponse, "Token")
                     if (finalToken.isNotEmpty()) {
                         httpClient.sessionToken = finalToken
-                        FileLogger.logToFile(httpClient.appContext, "HttpAuth", "Final session token updated: $finalToken")
+                        Log.i("HttpAuth", "Final session token updated: $finalToken")
                     } else {
                         httpClient.sessionToken = token
-                        FileLogger.logToFile(httpClient.appContext, "HttpAuth", "Using initial session token: $token")
+                        Log.i("HttpAuth", "Using initial session token: $token")
                     }
                     break
                 }
@@ -113,7 +113,6 @@ class HttpAuthentication(private val httpClient: HttpClient) {
 
             false
         } catch (e: Exception) {
-            FileLogger.logToFile(httpClient.appContext, "HttpAuth", "Authentication error: ${e.message}")
             Log.e("HttpAuth", "Authentication error: ${e.message}")
             false
         }
@@ -127,7 +126,7 @@ class HttpAuthentication(private val httpClient: HttpClient) {
             val bytes = MessageDigest.getInstance("MD5").digest(input.toByteArray())
             bytes.joinToString("") { "%02x".format(it) }
         } catch (e: Exception) {
-            FileLogger.logToFile(httpClient.appContext, "HttpAuth", "MD5 Hash error: ${e.message}")
+            Log.e("HttpAuth", "MD5 Hash error: ${e.message}")
             "" 
         }
     }
@@ -150,7 +149,7 @@ class HttpAuthentication(private val httpClient: HttpClient) {
                 afterKey.split(Regex("[,}]"))[0].trim()
             }
         } catch (e: Exception) {
-            FileLogger.logToFile(httpClient.appContext, "HttpAuth", "JSON Extraction error: ${e.message}")
+            Log.e("HttpAuth", "JSON Extraction error: ${e.message}")
             ""
         }
     }
