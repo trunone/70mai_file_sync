@@ -14,8 +14,13 @@ commonsNet = "3.13.0"
 okhttp = "5.3.2"
 lifecycle = "2.10.0"
 documentfile = "1.0.1"
+appsearch = "1.1.0-alpha02"
 
 [libraries]
+androidx-appsearch = { group = "androidx.appsearch", name = "appsearch", version.ref = "appsearch" }
+androidx-appsearch-platform-storage = { group = "androidx.appsearch", name = "appsearch-platform-storage", version.ref = "appsearch" }
+androidx-appsearch-builtin-types = { group = "androidx.appsearch", name = "appsearch-builtin-types", version.ref = "appsearch" }
+androidx-appsearch-compiler = { group = "androidx.appsearch", name = "appsearch-compiler", version.ref = "appsearch" }
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 #androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junitVersion" }
