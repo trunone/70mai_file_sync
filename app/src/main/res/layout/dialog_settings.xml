@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
-    android:layout_height="wrap_content">
+    android:layout_height="wrap_content"
+    android:fillViewport="true">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -9,76 +11,138 @@
         android:orientation="vertical"
         android:padding="20dp">
 
-        <TextView
-            style="@style/TextAppearance.AppCompat.Title"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/cam_settings_title" />
-
+        <!-- Camera Settings Header -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="@string/label_camera_ip" />
+            android:text="@string/cam_settings_title"
+            android:textColor="@color/accent_blue"
+            android:textSize="14sp"
+            android:textStyle="bold" />
 
-        <EditText
-            android:id="@+id/dialogCamIPTxt"
+        <com.google.android.material.textfield.TextInputLayout
+            style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="@string/cam_ip_hint"
-            android:importantForAutofill="no"
-            android:inputType="text" />
+            android:layout_marginTop="8dp"
+            android:hint="@string/label_camera_ip"
+            app:startIconDrawable="@drawable/ic_wifi"
+            app:startIconTint="@color/accent_blue">
 
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/dialogCamIPTxt"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="@string/cam_ip_hint"
+                android:importantForAutofill="no"
+                android:inputType="text"
+                android:textColor="@color/on_background_dark" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <!-- Storage Settings Header -->
         <TextView
-            style="@style/TextAppearance.AppCompat.Title"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="20dp"
-            android:text="@string/local_settings_title" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="@string/label_local_path" />
+            android:text="@string/local_settings_title"
+            android:textColor="@color/accent_blue"
+            android:textSize="14sp"
+            android:textStyle="bold" />
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical">
+            android:layout_marginTop="8dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
 
-            <EditText
-                android:id="@+id/dialogBackupPathTxt"
+            <com.google.android.material.textfield.TextInputLayout
+                style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:hint="@string/local_path_hint"
-                android:importantForAutofill="no"
-                android:inputType="text" />
+                android:hint="@string/label_local_path"
+                app:startIconDrawable="@drawable/ic_folder"
+                app:startIconTint="@color/accent_blue">
 
-            <Button
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/dialogBackupPathTxt"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:hint="@string/local_path_hint"
+                    android:importantForAutofill="no"
+                    android:inputType="text"
+                    android:textColor="@color/on_background_dark" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <com.google.android.material.button.MaterialButton
                 android:id="@+id/dialogBrowseFolderButton"
                 style="?attr/materialButtonOutlinedStyle"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
                 android:layout_marginStart="8dp"
-                android:text="@string/btn_browse_folder" />
+                android:layout_marginTop="4dp"
+                android:contentDescription="@string/btn_browse_folder"
+                android:padding="0dp"
+                app:icon="@drawable/ic_folder"
+                app:iconGravity="textStart"
+                app:iconPadding="0dp"
+                app:iconTint="@color/accent_blue"
+                app:strokeColor="@color/surface_card_stroke_dark" />
         </LinearLayout>
 
-        <CheckBox
-            android:id="@+id/dialogAutoDeleteCheckBox"
-            android:layout_width="match_parent"
+        <!-- Options Header -->
+        <TextView
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:text="@string/label_auto_delete" />
+            android:layout_marginTop="20dp"
+            android:text="Sync Preferences"
+            android:textColor="@color/accent_blue"
+            android:textSize="14sp"
+            android:textStyle="bold" />
 
-        <CheckBox
-            android:id="@+id/dialogCycleCheckCheckBox"
+        <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
-            android:text="@string/label_cycle_check" />
+            app:cardBackgroundColor="@color/surface_card_dark"
+            app:cardCornerRadius="12dp"
+            app:cardElevation="0dp"
+            app:strokeColor="@color/surface_card_stroke_dark"
+            app:strokeWidth="1dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="8dp">
+
+                <CheckBox
+                    android:id="@+id/dialogAutoDeleteCheckBox"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:paddingStart="8dp"
+                    android:text="@string/label_auto_delete"
+                    android:textColor="@color/on_background_dark"
+                    android:textSize="14sp" />
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:layout_marginHorizontal="8dp"
+                    android:background="@color/surface_card_stroke_dark" />
+
+                <CheckBox
+                    android:id="@+id/dialogCycleCheckCheckBox"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:paddingStart="8dp"
+                    android:text="@string/label_cycle_check"
+                    android:textColor="@color/on_background_dark"
+                    android:textSize="14sp" />
+            </LinearLayout>
+
+        </com.google.android.material.card.MaterialCardView>
 
     </LinearLayout>
 </ScrollView>

@@ -5,36 +5,45 @@
     android:id="@+id/main"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
+    android:background="@color/background_dark"
     android:fitsSystemWindows="true"
+    android:orientation="vertical"
     tools:context=".SettingsActivity">
 
+    <!-- Top App Bar -->
     <com.google.android.material.appbar.MaterialToolbar
         android:id="@+id/toolbar"
         android:layout_width="match_parent"
         android:layout_height="?attr/actionBarSize"
         android:background="@color/surface_dark"
+        android:elevation="4dp"
         app:title="@string/app_name"
-        app:titleTextColor="#FFFFFF" />
+        app:titleCentered="false"
+        app:titleTextColor="@color/on_background_dark" />
 
+    <!-- Tab Layout -->
     <com.google.android.material.tabs.TabLayout
         android:id="@+id/tabLayout"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:background="@color/surface_dark"
-        app:tabTextColor="#80FFFFFF"
-        app:tabSelectedTextColor="#FFFFFF"
-        app:tabIndicatorColor="#2196F3"
-        app:tabMode="fixed">
+        app:tabIndicatorColor="@color/accent_blue"
+        app:tabIndicatorHeight="3dp"
+        app:tabMode="fixed"
+        app:tabRippleColor="@color/surface_card_stroke_dark"
+        app:tabSelectedTextColor="@color/accent_blue"
+        app:tabTextColor="@color/text_secondary_dark">
 
         <com.google.android.material.tabs.TabItem
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:icon="@drawable/ic_download"
             android:text="@string/tab_transfer" />
 
         <com.google.android.material.tabs.TabItem
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:icon="@drawable/ic_video_file"
             android:text="@string/tab_viewer" />
     </com.google.android.material.tabs.TabLayout>
 
@@ -47,206 +56,308 @@
             android:id="@+id/controlsLayout"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
+            android:clipToPadding="false"
             android:fillViewport="true"
+            android:padding="16dp"
             android:visibility="visible">
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:padding="16dp">
+                android:orientation="vertical">
 
-                <androidx.constraintlayout.widget.ConstraintLayout
+                <!-- Control Center Card -->
+                <com.google.android.material.card.MaterialCardView
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content">
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="16dp"
+                    app:cardBackgroundColor="@color/surface_card_dark"
+                    app:cardCornerRadius="16dp"
+                    app:cardElevation="3dp"
+                    app:strokeColor="@color/surface_card_stroke_dark"
+                    app:strokeWidth="1dp">
 
-                    <!-- Main Toggle Button -->
-                    <Button
-                        android:id="@+id/startStopButton"
-                        android:layout_width="0dp"
-                        android:layout_height="64dp"
-                        android:text="@string/btn_start"
-                        android:textColor="@color/black"
-                        android:textStyle="bold"
-                        android:textSize="18sp"
-                        app:backgroundTint="@color/toggle_start"
-                        app:cornerRadius="12dp"
-                        app:layout_constraintEnd_toEndOf="parent"
-                        app:layout_constraintStart_toStartOf="parent"
-                        app:layout_constraintTop_toTopOf="parent"
-                        app:layout_constraintWidth_percent="0.65" />
-
-                    <!-- Reset Section -->
-                    <TextView
-                        android:id="@+id/resetLabel"
-                        android:layout_width="wrap_content"
+                    <LinearLayout
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="16dp"
-                        android:text="@string/label_reset"
-                        android:textColor="#B0B0B0"
-                        android:textSize="12sp"
-                        android:textStyle="bold"
-                        app:layout_constraintStart_toStartOf="parent"
-                        app:layout_constraintEnd_toEndOf="parent"
-                        app:layout_constraintTop_toBottomOf="@id/startStopButton" />
+                        android:orientation="vertical"
+                        android:padding="16dp">
 
-                    <Button
-                        android:id="@+id/clrCount"
-                        style="?attr/materialButtonStyle"
-                        android:layout_width="0dp"
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Control Center"
+                            android:textColor="@color/accent_blue"
+                            android:textSize="14sp"
+                            android:textStyle="bold" />
+
+                        <!-- Start/Stop Toggle Button -->
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/startStopButton"
+                            android:layout_width="match_parent"
+                            android:layout_height="56dp"
+                            android:layout_marginTop="12dp"
+                            android:text="@string/btn_start"
+                            android:textColor="@color/white"
+                            android:textSize="16sp"
+                            android:textStyle="bold"
+                            app:backgroundTint="@color/toggle_start"
+                            app:cornerRadius="12dp"
+                            app:icon="@drawable/ic_play"
+                            app:iconGravity="textStart"
+                            app:iconPadding="8dp"
+                            app:iconTint="@color/white" />
+
+                        <!-- Connect Wi-Fi Button -->
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/connectWifiButton"
+                            style="@style/Widget.Material3.Button.OutlinedButton"
+                            android:layout_width="match_parent"
+                            android:layout_height="50dp"
+                            android:layout_marginTop="10dp"
+                            android:text="@string/btn_connect_wifi"
+                            android:textColor="@color/wifi_button_color"
+                            android:textSize="14sp"
+                            android:textStyle="bold"
+                            app:cornerRadius="12dp"
+                            app:icon="@drawable/ic_wifi"
+                            app:iconGravity="textStart"
+                            app:iconPadding="8dp"
+                            app:iconTint="@color/wifi_button_color"
+                            app:strokeColor="@color/wifi_button_color"
+                            app:strokeWidth="1.5dp" />
+
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
+                <!-- Live Status & Active Transfer Card -->
+                <com.google.android.material.card.MaterialCardView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="16dp"
+                    app:cardBackgroundColor="@color/surface_card_dark"
+                    app:cardCornerRadius="16dp"
+                    app:cardElevation="3dp"
+                    app:strokeColor="@color/surface_card_stroke_dark"
+                    app:strokeWidth="1dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="4dp"
-                        android:layout_marginEnd="4dp"
-                        android:text="@string/btn_stat"
-                        android:textSize="12sp"
-                        app:backgroundTint="@android:color/holo_red_dark"
-                        app:layout_constraintEnd_toStartOf="@+id/clrToken"
-                        app:layout_constraintHorizontal_bias="0.5"
-                        app:layout_constraintStart_toStartOf="parent"
-                        app:layout_constraintTop_toBottomOf="@id/resetLabel" />
+                        android:orientation="vertical"
+                        android:padding="16dp">
 
-                    <Button
-                        android:id="@+id/clrToken"
-                        style="?attr/materialButtonStyle"
-                        android:layout_width="0dp"
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="Live Sync Status"
+                                android:textColor="@color/accent_blue"
+                                android:textSize="14sp"
+                                android:textStyle="bold" />
+
+                            <TextView
+                                android:id="@+id/fileTransferSpeed"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:textColor="@color/accent_blue"
+                                android:textSize="16sp"
+                                android:textStyle="bold"
+                                tools:text="2.5 MB/s" />
+                        </LinearLayout>
+
+                        <TextView
+                            android:id="@+id/fileNameInProcess"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="12dp"
+                            android:ellipsize="middle"
+                            android:maxLines="1"
+                            android:textColor="@color/on_background_dark"
+                            android:textSize="15sp"
+                            android:textStyle="bold"
+                            tools:text="Processing: NO20230520_120000.MP4" />
+
+                        <TextView
+                            android:id="@+id/fileProgressPercentage"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:textColor="@color/accent_green"
+                            android:textSize="13sp"
+                            android:textStyle="bold"
+                            android:visibility="gone"
+                            tools:text="Progress: 45%"
+                            tools:visibility="visible" />
+
+                        <TextView
+                            android:id="@+id/statusTextView"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:textColor="@color/text_secondary_dark"
+                            android:textSize="13sp"
+                            tools:text="Status: Waiting to start check." />
+
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
+                <!-- Transfer Statistics Card -->
+                <com.google.android.material.card.MaterialCardView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="16dp"
+                    app:cardBackgroundColor="@color/surface_card_dark"
+                    app:cardCornerRadius="16dp"
+                    app:cardElevation="3dp"
+                    app:strokeColor="@color/surface_card_stroke_dark"
+                    app:strokeWidth="1dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginStart="4dp"
-                        android:text="@string/btn_token"
-                        android:textSize="12sp"
-                        app:backgroundTint="@android:color/holo_red_dark"
-                        app:layout_constraintBottom_toBottomOf="@+id/clrCount"
-                        app:layout_constraintEnd_toEndOf="parent"
-                        app:layout_constraintHorizontal_bias="0.5"
-                        app:layout_constraintStart_toEndOf="@+id/clrCount"
-                        app:layout_constraintTop_toTopOf="@+id/clrCount" />
+                        android:orientation="vertical"
+                        android:padding="16dp">
 
-                    <!-- Network Section -->
-                    <TextView
-                        android:id="@+id/networkLabel"
-                        android:layout_width="wrap_content"
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Transfer Statistics"
+                            android:textColor="@color/accent_blue"
+                            android:textSize="14sp"
+                            android:textStyle="bold" />
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="12dp"
+                            android:baselineAligned="false"
+                            android:orientation="horizontal">
+
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:orientation="vertical">
+
+                                <TextView
+                                    android:id="@+id/totalFilesDownloadedTextView"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:textColor="@color/on_background_dark"
+                                    android:textSize="14sp"
+                                    android:textStyle="bold"
+                                    tools:text="Total Downloaded: 12" />
+
+                                <TextView
+                                    android:id="@+id/pendingCameraFilesTextView"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="6dp"
+                                    android:textColor="@color/accent_orange"
+                                    android:textSize="13sp"
+                                    tools:text="Remaining on Camera: 3" />
+                            </LinearLayout>
+
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:orientation="vertical">
+
+                                <TextView
+                                    android:id="@+id/lastDownloadDurationTextView"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:textColor="@color/on_background_dark"
+                                    android:textSize="13sp"
+                                    tools:text="Last Transfer Time: 1.5s" />
+
+                                <TextView
+                                    android:id="@+id/lastDownloadResultTextView"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="6dp"
+                                    android:textColor="@color/text_secondary_dark"
+                                    android:textSize="13sp"
+                                    tools:text="Last Download: SUCCESS" />
+                            </LinearLayout>
+                        </LinearLayout>
+
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
+                <!-- Maintenance & Resets Card -->
+                <com.google.android.material.card.MaterialCardView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="16dp"
+                    app:cardBackgroundColor="@color/surface_card_dark"
+                    app:cardCornerRadius="16dp"
+                    app:cardElevation="3dp"
+                    app:strokeColor="@color/surface_card_stroke_dark"
+                    app:strokeWidth="1dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="16dp"
-                        android:text="@string/label_network"
-                        android:textColor="#B0B0B0"
-                        android:textSize="12sp"
-                        android:textStyle="bold"
-                        app:layout_constraintStart_toStartOf="parent"
-                        app:layout_constraintEnd_toEndOf="parent"
-                        app:layout_constraintTop_toBottomOf="@id/clrCount" />
+                        android:orientation="vertical"
+                        android:padding="16dp">
 
-                    <Button
-                        android:id="@+id/connectWifiButton"
-                        style="?attr/materialButtonStyle"
-                        android:layout_width="0dp"
-                        android:layout_height="56dp"
-                        android:layout_marginTop="4dp"
-                        android:text="@string/btn_connect_wifi"
-                        android:textColor="@color/white"
-                        android:textStyle="bold"
-                        app:backgroundTint="@color/purple_500"
-                        app:cornerRadius="8dp"
-                        app:layout_constraintEnd_toEndOf="parent"
-                        app:layout_constraintStart_toStartOf="parent"
-                        app:layout_constraintTop_toBottomOf="@id/networkLabel"
-                        app:layout_constraintWidth_percent="0.65" />
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Maintenance"
+                            android:textColor="@color/accent_blue"
+                            android:textSize="14sp"
+                            android:textStyle="bold" />
 
-                </androidx.constraintlayout.widget.ConstraintLayout>
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="12dp"
+                            android:orientation="horizontal">
 
-                <!-- Status fields -->
-                <TextView
-                    android:id="@+id/statusTextView"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="24dp"
-                    android:gravity="center"
-                    android:textAppearance="?attr/textAppearanceBody1"
-                    android:visibility="gone"
-                    tools:text="Status: Waiting..."
-                    tools:visibility="visible" />
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/clrCount"
+                                style="@style/Widget.Material3.Button.OutlinedButton"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_marginEnd="6dp"
+                                android:layout_weight="1"
+                                android:text="@string/btn_stat"
+                                android:textColor="@color/accent_red"
+                                android:textSize="13sp"
+                                app:cornerRadius="10dp"
+                                app:icon="@drawable/ic_stat"
+                                app:iconTint="@color/accent_red"
+                                app:strokeColor="@color/accent_red" />
 
-                <TextView
-                    android:id="@+id/lastDownloadResultTextView"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:gravity="center"
-                    android:textAppearance="?attr/textAppearanceBody2"
-                    android:visibility="gone"
-                    tools:text="Last download: SUCCESS"
-                    tools:visibility="visible" />
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/clrToken"
+                                style="@style/Widget.Material3.Button.OutlinedButton"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="6dp"
+                                android:layout_weight="1"
+                                android:text="@string/btn_token"
+                                android:textColor="@color/accent_red"
+                                android:textSize="13sp"
+                                app:cornerRadius="10dp"
+                                app:icon="@drawable/ic_key"
+                                app:iconTint="@color/accent_red"
+                                app:strokeColor="@color/accent_red" />
+                        </LinearLayout>
 
-                <TextView
-                    android:id="@+id/fileNameInProcess"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="16dp"
-                    android:gravity="center"
-                    android:textColor="#FFFFFF"
-                    android:textSize="16sp"
-                    android:visibility="visible"
-                    android:textAppearance="?attr/textAppearanceBody1"
-                    android:text="@string/status_idle" />
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
 
-                <TextView
-                    android:id="@+id/fileTransferSpeed"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:gravity="center"
-                    android:textColor="#2196F3"
-                    android:textSize="18sp"
-                    android:textStyle="bold"
-                    android:visibility="visible"
-                    android:textAppearance="?attr/textAppearanceHeadline6"
-                    android:text="@string/speed_idle" />
-
-                <TextView
-                    android:id="@+id/fileProgressPercentage"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="2dp"
-                    android:gravity="center"
-                    android:textColor="#4CAF50"
-                    android:textSize="14sp"
-                    android:textStyle="bold"
-                    android:visibility="gone"
-                    tools:text="Progress: 45%"
-                    tools:visibility="visible" />
-
-                <TextView
-                    android:id="@+id/totalFilesDownloadedTextView"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:gravity="center"
-                    android:textAppearance="?attr/textAppearanceBody1"
-                    android:textStyle="bold"
-                    android:visibility="gone"
-                    tools:text="Total downloaded: 123"
-                    tools:visibility="visible" />
-
-                <TextView
-                    android:id="@+id/lastDownloadDurationTextView"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:gravity="center"
-                    android:textAppearance="?attr/textAppearanceBody2"
-                    android:visibility="gone"
-                    tools:text="Last transfer time: 1.50 sec"
-                    tools:visibility="visible" />
-
-                <TextView
-                    android:id="@+id/pendingCameraFilesTextView"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:gravity="center"
-                    android:textAppearance="?attr/textAppearanceBody2"
-                    android:textColor="@android:color/holo_blue_dark"
-                    android:visibility="gone"
-                    tools:text="Remaining on camera: 10"
-                    tools:visibility="visible" />
             </LinearLayout>
         </ScrollView>
 
@@ -256,37 +367,54 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:orientation="vertical"
-            android:padding="8dp"
+            android:padding="12dp"
             android:visibility="gone">
 
             <!-- Selection and Action Header -->
-            <LinearLayout
+            <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:paddingBottom="8dp">
+                android:layout_marginBottom="8dp"
+                app:cardBackgroundColor="@color/surface_card_dark"
+                app:cardCornerRadius="12dp"
+                app:cardElevation="2dp"
+                app:strokeColor="@color/surface_card_stroke_dark"
+                app:strokeWidth="1dp">
 
-                <Button
-                    android:id="@+id/btnSelectAll"
-                    style="?attr/materialButtonOutlinedStyle"
-                    android:layout_width="wrap_content"
+                <LinearLayout
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="@string/btn_select_all"
-                    android:textSize="12sp" />
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:padding="8dp">
 
-                <Button
-                    android:id="@+id/btnDeleteSelected"
-                    style="?attr/materialButtonStyle"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:layout_marginStart="8dp"
-                    android:text="@string/btn_delete_selected"
-                    android:textColor="@color/white"
-                    android:textSize="13sp"
-                    app:backgroundTint="@android:color/holo_red_dark" />
-            </LinearLayout>
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnSelectAll"
+                        style="@style/Widget.Material3.Button.OutlinedButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/btn_select_all"
+                        android:textColor="@color/accent_blue"
+                        android:textSize="12sp"
+                        app:cornerRadius="8dp"
+                        app:strokeColor="@color/accent_blue" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnDeleteSelected"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:layout_weight="1"
+                        android:text="@string/btn_delete_selected"
+                        android:textColor="@color/white"
+                        android:textSize="13sp"
+                        app:backgroundTint="@color/toggle_stop"
+                        app:cornerRadius="8dp"
+                        app:icon="@drawable/ic_delete"
+                        app:iconGravity="textStart"
+                        app:iconTint="@color/white" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
 
             <ProgressBar
                 android:id="@+id/viewerProgressBar"
@@ -301,15 +429,18 @@
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:gravity="center"
+                android:padding="24dp"
                 android:text="@string/msg_no_remote_files"
-                android:textColor="#B0B0B0"
-                android:textSize="16sp"
+                android:textColor="@color/text_secondary_dark"
+                android:textSize="15sp"
                 android:visibility="visible" />
 
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/remoteFilesRecyclerView"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
+                android:clipToPadding="false"
+                android:paddingBottom="16dp"
                 android:visibility="gone" />
 
         </LinearLayout>

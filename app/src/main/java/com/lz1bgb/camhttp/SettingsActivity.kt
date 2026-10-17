@@ -216,9 +216,11 @@ class SettingsActivity : AppCompatActivity() {
         if (isServiceRunning) {
             binding.startStopButton.text = getString(R.string.btn_stop)
             binding.startStopButton.backgroundTintList = ColorStateList.valueOf(ContextCompat.getColor(this, R.color.toggle_stop))
+            binding.startStopButton.setIconResource(R.drawable.ic_stop)
         } else {
             binding.startStopButton.text = getString(R.string.btn_start)
             binding.startStopButton.backgroundTintList = ColorStateList.valueOf(ContextCompat.getColor(this, R.color.toggle_start))
+            binding.startStopButton.setIconResource(R.drawable.ic_play)
             binding.statusTextView.text = getString(R.string.status_waiting_start)
         }
     }
