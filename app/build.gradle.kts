@@ -64,5 +64,9 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.androidx.documentfile)
 
+    implementation(libs.androidx.appsearch)
+    implementation(libs.androidx.appsearch.platform.storage)
+    implementation(libs.androidx.appsearch.builtin.types)
+
     testImplementation(libs.junit)
 }
