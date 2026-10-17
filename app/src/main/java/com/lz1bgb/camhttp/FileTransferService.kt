@@ -107,7 +107,7 @@ class FileTransferService : Service() {
                 wifiLock?.acquire()
             }
         } catch (e: Exception) {
-            FileLogger.logToFile(this, "FileService", "Error acquiring locks: ${e.message}")
+            Log.e("FileService", "Error acquiring locks: ${e.message}")
         }
     }
 
@@ -120,7 +120,7 @@ class FileTransferService : Service() {
                 wifiLock?.release()
             }
         } catch (e: Exception) {
-            FileLogger.logToFile(this, "FileService", "Error releasing locks: ${e.message}")
+            Log.e("FileService", "Error releasing locks: ${e.message}")
         }
     }
 
@@ -172,10 +172,9 @@ class FileTransferService : Service() {
             scope.launch {
                 try {
                     acquireLocks()
-                    FileLogger.logToFile(this@FileTransferService, "FileService", "Starting periodic check...")
+                    Log.d("FileService", "Starting periodic check...")
                     performTransferCycle()
                 } catch (e: Exception) {
-                    FileLogger.logToFile(this@FileTransferService, "FileService", "Error in cycle: ${e.message}")
                     Log.e("FileService", "Error in cycle: ${e.message}")
                 } finally {
                     releaseLocks()
@@ -186,13 +185,13 @@ class FileTransferService : Service() {
                     if (job.isActive && isCycleCheck) {
                         scheduleNextRun()
                     } else if (!isCycleCheck) {
-                        FileLogger.logToFile(this@FileTransferService, "FileService", "One-time check completed. Stopping service.")
+                        Log.i("FileService", "One-time check completed. Stopping service.")
                         stopSelf()
                     }
                 }
             }
         } else {
-            FileLogger.logToFile(this, "FileService", "Skip check - task still running.")
+            Log.d("FileService", "Skip check - task still running.")
         }
     }
 
@@ -211,7 +210,7 @@ class FileTransferService : Service() {
 
         // Try HTTP (Camera) if connected
         if (dhcp == camIp) {
-            FileLogger.logToFile(this, "FileService", "Camera detected ($camIp). Starting HTTP cycle.")
+            Log.i("FileService", "Camera detected ($camIp). Starting HTTP cycle.")
             val success = runHttpCycle()
             if (success) {
                 updateStatus(getString(R.string.msg_http_success), "SUCCESS")
@@ -219,7 +218,7 @@ class FileTransferService : Service() {
                 updateStatus(getString(R.string.msg_http_error), "ERROR")
             }
         } else {
-            FileLogger.logToFile(this, "FileService", "Camera network not detected.")
+            Log.i("FileService", "Camera network not detected.")
             pendingCameraFiles = 0
             updateStatus(getString(R.string.msg_camera_not_found), "IDLE")
         }
@@ -266,7 +265,7 @@ class FileTransferService : Service() {
         
         // If no token, attempt pairing
         if (token == null) {
-            FileLogger.logToFile(this, "FileService", "No token. Starting pairing...")
+            Log.i("FileService", "No token. Starting pairing...")
             val authSuccess = httpAuth.performAuthenticationLogic()
             if (!authSuccess) return false
             token = httpClient.sessionToken ?: return false
@@ -279,7 +278,7 @@ class FileTransferService : Service() {
         try {
             // Enable Album Mode to pause video recording and unlock full file list/access on SD card
             albumModeActive = httpClient.setAlbumMode(true)
-            FileLogger.logToFile(this, "FileService", "Album Mode enabled: $albumModeActive")
+            Log.d("FileService", "Album Mode enabled: $albumModeActive")
 
             // Wait 2 seconds for camera hardware to pause recording and initialize album file index
             kotlinx.coroutines.delay(2000)
@@ -291,7 +290,7 @@ class FileTransferService : Service() {
             for (type in fileTypes) {
                 val files = httpClient.getFileList(type)
                 if (files != null) {
-                    FileLogger.logToFile(this, "FileService", "Type $type: Found ${files.size} files.")
+                    Log.d("FileService", "Type $type: Found ${files.size} files.")
                     
                     val typeFiles = if (type in listOf(0, 1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12)) {
                         if (albumModeActive) {
@@ -301,7 +300,7 @@ class FileTransferService : Service() {
                             // Fallback if album mode was inactive: exclude only the 1 latest active file
                             files.sortedBy { it.name }.dropLast(1)
                         } else {
-                            FileLogger.logToFile(this, "FileService", "Type $type has only 1 file and Album Mode is inactive. Waiting for finalization.")
+                            Log.d("FileService", "Type $type has only 1 file and Album Mode is inactive. Waiting for finalization.")
                             emptyList()
                         }
                     } else {
@@ -313,7 +312,7 @@ class FileTransferService : Service() {
             }
 
             if (allFiles.isEmpty()) {
-                FileLogger.logToFile(this, "FileService", "No new ready files for download.")
+                Log.i("FileService", "No new ready files for download.")
                 return true
             }
 
@@ -334,13 +333,13 @@ class FileTransferService : Service() {
             }
 
             for ((groupKey, filesInGroup) in groupedFiles) {
-                FileLogger.logToFile(this, "FileService", "Processing group $groupKey with files: ${filesInGroup.joinToString { it.name }}")
+                Log.d("FileService", "Processing group $groupKey with files: ${filesInGroup.joinToString { it.name }}")
                 
                 val successfullyDownloadedFiles = mutableListOf<FileInfo>()
                 var networkErrorOccurred = false
 
                 for (file in filesInGroup) {
-                    FileLogger.logToFile(this, "FileService", "Checking ${file.name} (Path: ${file.path})")
+                    Log.d("FileService", "Checking ${file.name} (Path: ${file.path})")
                     val parentFolder = file.path.substringAfterLast('/').ifEmpty { file.path }
                     currentFileName = "$parentFolder/${file.name}"
 
@@ -354,7 +353,6 @@ class FileTransferService : Service() {
 
                     // Check if file already exists locally
                     if (isLocalFileExisting(customLocalPath, cleanPath, file.name, file.size)) {
-                        FileLogger.logToFile(this, "FileService", "File ${file.name} already exists locally. Skipping download.")
                         Log.i("FileService", "File ${file.name} already exists locally. Skipping download.")
                         successfullyDownloadedFiles.add(file)
                         continue
@@ -406,14 +404,14 @@ class FileTransferService : Service() {
                             Log.e("FileService", "Error downloading ${file.name}. Group incomplete.")
                         }
                     } catch (e: Exception) {
-                        FileLogger.logToFile(this, "FileService", "Critical download error: ${e.message}")
+                        Log.e("FileService", "Critical download error: ${e.message}")
                         networkErrorOccurred = true
                         break // Stop processing this group
                     }
                 }
 
                 if (networkErrorOccurred) {
-                    FileLogger.logToFile(this, "FileService", "Network error detected. Aborting cycle.")
+                    Log.e("FileService", "Network error detected. Aborting cycle.")
                     break // Stop all groups
                 }
 
@@ -421,22 +419,22 @@ class FileTransferService : Service() {
                 if (successfullyDownloadedFiles.size == filesInGroup.size) {
                     val autoDeleteEnabled = prefs.getBoolean("AUTO_DELETE_REMOTE", true)
                     if (autoDeleteEnabled) {
-                        FileLogger.logToFile(this, "FileService", "Group $groupKey downloaded/verified successfully. Deleting from camera...")
+                        Log.i("FileService", "Group $groupKey downloaded/verified successfully. Deleting from camera...")
                         for (file in successfullyDownloadedFiles) {
                             val deleted = httpClient.deleteRemoteFile(file.path, file.name, token)
                             if (deleted) {
-                                FileLogger.logToFile(this, "FileService", "Deleted from camera: ${file.name}")
+                                Log.i("FileService", "Deleted from camera: ${file.name}")
                                 if (pendingCameraFiles > 0) pendingCameraFiles--
                             } else {
                                 Log.e("FileService", "Failed to delete ${file.name} from camera.")
                             }
                         }
                     } else {
-                        FileLogger.logToFile(this, "FileService", "Group $groupKey downloaded/verified successfully. Auto delete disabled, skipping deletion.")
+                        Log.i("FileService", "Group $groupKey downloaded/verified successfully. Auto delete disabled, skipping deletion.")
                         pendingCameraFiles -= filesInGroup.size
                     }
                 } else {
-                    FileLogger.logToFile(this, "FileService", "Group $groupKey was NOT fully downloaded (Success: ${successfullyDownloadedFiles.size}/${filesInGroup.size}). Deletion skipped.")
+                    Log.w("FileService", "Group $groupKey was NOT fully downloaded (Success: ${successfullyDownloadedFiles.size}/${filesInGroup.size}). Deletion skipped.")
                     // Update pending count by removing processed group from the count to reflect UI correctly
                     pendingCameraFiles -= filesInGroup.size
                 }
@@ -449,7 +447,7 @@ class FileTransferService : Service() {
         } finally {
             if (albumModeActive) {
                 val albumModeOff = httpClient.setAlbumMode(false)
-                FileLogger.logToFile(this, "FileService", "Resuming camera recording (Album Mode off): $albumModeOff")
+                Log.d("FileService", "Resuming camera recording (Album Mode off): $albumModeOff")
             }
         }
     }
@@ -468,7 +466,7 @@ class FileTransferService : Service() {
                     ?: return@withContext false
 
                 if (!rootDoc.canWrite()) {
-                    FileLogger.logToFile(this@FileTransferService, "FileService", "Cannot write to selected folder Uri.")
+                    Log.e("FileService", "Cannot write to selected folder Uri.")
                     return@withContext false
                 }
 
@@ -526,7 +524,7 @@ class FileTransferService : Service() {
 
                 return@withContext bytesDownloaded > 0
             } catch (e: Exception) {
-                FileLogger.logToFile(this@FileTransferService, "FileService", "DocumentTree download error: ${e.message}")
+                Log.e("FileService", "DocumentTree download error: ${e.message}")
                 e.printStackTrace()
                 false
             }
@@ -588,7 +586,7 @@ class FileTransferService : Service() {
         nextExecutionTime = System.currentTimeMillis() + checkInterval
         isScheduled.set(true)
         handler.postDelayed(periodicCheck, checkInterval)
-        FileLogger.logToFile(this, "FileService", "Next check scheduled.")
+        Log.d("FileService", "Next check scheduled.")
     }
 
     override fun onCreate() {
@@ -629,7 +627,7 @@ class FileTransferService : Service() {
         job = SupervisorJob()
         scope = CoroutineScope(Dispatchers.IO + job)
         
-        FileLogger.logToFile(this, "FileService", "Transfer manually stopped and reset.")
+        Log.i("FileService", "Transfer manually stopped and reset.")
     }
 
     override fun onDestroy() {
@@ -643,7 +641,7 @@ class FileTransferService : Service() {
 
         releaseLocks()
         scope.cancel()
-        FileLogger.logToFile(this, "FileService", "Service stopped and cleaned up.")
+        Log.i("FileService", "Service stopped and cleaned up.")
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {

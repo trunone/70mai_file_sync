@@ -77,7 +77,7 @@ class SettingsActivity : AppCompatActivity() {
             try {
                 contentResolver.takePersistableUriPermission(uri, takeFlags)
             } catch (e: Exception) {
-                FileLogger.logToFile(this, "SettingsActivity", "Failed to take persistable Uri permission: ${e.message}")
+                android.util.Log.e("SettingsActivity", "Failed to take persistable Uri permission: ${e.message}")
             }
             activeDialogBinding?.dialogBackupPathTxt?.setText(uri.toString())
             getSharedPreferences("FtpSettings", MODE_PRIVATE).edit {
@@ -267,7 +267,7 @@ class SettingsActivity : AppCompatActivity() {
                     try {
                         unbindService(serviceConnection)
                     } catch (e: Exception) {
-                        FileLogger.logToFile(this@SettingsActivity,"Activity", "Unbind error: ${e.message}")
+                        android.util.Log.e("Activity", "Unbind error: ${e.message}")
                     }
                     isBound = false
                     fileTransferService = null

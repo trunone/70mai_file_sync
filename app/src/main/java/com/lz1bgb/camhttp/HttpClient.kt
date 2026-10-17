@@ -199,12 +199,12 @@ class HttpClient(context: Context) {
                 this.cameraClient = client.newBuilder()
                     .socketFactory(foundCameraNetwork.socketFactory)
                     .build()
-                FileLogger.logToFile(appContext, "HttpClient", "Bound to camera Wi-Fi network.")
+                Log.i("HttpClient", "Bound to camera Wi-Fi network.")
             }
         } else {
             this.cameraNetwork = null
             this.cameraClient = null
-            FileLogger.logToFile(appContext, "HttpClient", "Camera network not detected.")
+            Log.i("HttpClient", "Camera network not detected.")
             
             // If not on camera network, update default active network info
             val activeNetwork = connectivityManager.activeNetwork
@@ -246,12 +246,12 @@ class HttpClient(context: Context) {
                     response.close()
                     responseBody
                 } else {
-                    FileLogger.logToFile(appContext, "HttpClient", "Request failed (${response.code}): $url")
+                    Log.e("HttpClient", "Request failed (${response.code}): $url")
                     response.close()
                     null
                 }
             } catch (e: IOException) {
-                FileLogger.logToFile(appContext, "HttpClient", "Execute request IOException: ${e.message}")
+                Log.e("HttpClient", "Execute request IOException: ${e.message}")
                 e.printStackTrace()
                 null
             }
@@ -268,8 +268,8 @@ class HttpClient(context: Context) {
     suspend fun downloadFile(url: String, destinationFolderPath: String, onProgress: ((Long, Long) -> Unit)? = null): Boolean {
         return withContext(Dispatchers.IO) {
             try {
-                FileLogger.logToFile(appContext, "HttpClient", "Attempting URL: $url")
-                FileLogger.logToFile(appContext, "HttpClient", "Target path: $destinationFolderPath")
+                Log.d("HttpClient", "Attempting URL: $url")
+                Log.d("HttpClient", "Target path: $destinationFolderPath")
 
                 val fileName = url.substringAfterLast('/').substringBefore('?')
                 if (fileName.isEmpty()) return@withContext false
@@ -280,20 +280,20 @@ class HttpClient(context: Context) {
                 val destinationFile = File(folder, fileName)
 
                 val request = Request.Builder().url(url).build()
-                FileLogger.logToFile(appContext, "HttpClient", "Downloading from URL: $url")
+                Log.d("HttpClient", "Downloading from URL: $url")
                 
                 val activeClient = getOkHttpClientForUrl(url)
                 val response = activeClient.newCall(request).execute()
 
                 if (!response.isSuccessful) {
-                    FileLogger.logToFile(appContext, "HttpClient", "File download failed: ${response.code}")
+                    Log.e("HttpClient", "File download failed: ${response.code}")
                     response.close() // Close on error
                     return@withContext false
                 }
 
                 val body = response.body
                 if (body == null) {
-                    FileLogger.logToFile(appContext, "HttpClient", "Empty response body")
+                    Log.e("HttpClient", "Empty response body")
                     response.close() // Close
                     return@withContext false
                 }
@@ -319,11 +319,11 @@ class HttpClient(context: Context) {
                 return@withContext true // Success!
 
             } catch (e: IOException) {
-                FileLogger.logToFile(appContext, "HttpClient", "Download file IOException: ${e.message}")
+                Log.e("HttpClient", "Download file IOException: ${e.message}")
                 e.printStackTrace()
                 return@withContext false
             } catch (e: SecurityException) {
-                FileLogger.logToFile(appContext, "HttpClient", "Download file SecurityException: ${e.message}")
+                Log.e("HttpClient", "Download file SecurityException: ${e.message}")
                 e.printStackTrace()
                 return@withContext false
             }
@@ -351,10 +351,10 @@ class HttpClient(context: Context) {
                 val url = "http://$dhcp/cgi-bin/$queryPath$queryParams&-signkey=$sign"
                 val response = executeRequest(url)
                 
-                FileLogger.logToFile(appContext, "HttpClient", "Set album mode (enable=$enableValue) response: $response")
+                Log.d("HttpClient", "Set album mode (enable=$enableValue) response: $response")
                 response?.contains("\"ResultCode\":0") == true || response?.contains("\"ResultCode\":\"0\"") == true
             } catch (e: Exception) {
-                FileLogger.logToFile(appContext, "HttpClient", "Delete remote file error: ${e.message}")
+                Log.e("HttpClient", "Set album mode error: ${e.message}")
                 e.printStackTrace()
                 false
             }
@@ -383,7 +383,7 @@ class HttpClient(context: Context) {
                 Log.d("HttpClient", "Register client response: $response")
                 response?.contains("success") == true || response?.contains("\"ResultCode\":0") == true || response?.contains("\"ResultCode\":\"0\"") == true
             } catch (e: Exception) {
-                FileLogger.logToFile(appContext, "HttpClient", "Delete remote file error: ${e.message}")
+                Log.e("HttpClient", "Register client error: ${e.message}")
                 e.printStackTrace()
                 false
             }
@@ -415,14 +415,14 @@ class HttpClient(context: Context) {
                     val sign = generateSignKey(queryPath + queryParams, token)
                     val url = "http://$dhcp/cgi-bin/$queryPath$queryParams&-signkey=$sign"
                     
-                    FileLogger.logToFile(appContext, "HttpClient", "Fetching file list: $url")
+                    Log.d("HttpClient", "Fetching file list: $url")
                     var responseJson = executeRequest(url) ?: break
-                    FileLogger.logToFile(appContext, "HttpClient", "Get file list response (type $type): $responseJson")
+                    Log.d("HttpClient", "Get file list response (type $type): $responseJson")
 
                     var apiResponse = try {
                         json.decodeFromString<ApiResponse>(responseJson)
                     } catch (e: Exception) {
-                        FileLogger.logToFile(appContext, "HttpClient", "JSON parse error (type $type): ${e.message}")
+                        Log.e("HttpClient", "JSON parse error (type $type): ${e.message}")
                         break
                     }
                     var code = apiResponse.resultCode.toString().replace("\"", "")
@@ -460,15 +460,15 @@ class HttpClient(context: Context) {
                                 else -> continue
                             }
 
-                            FileLogger.logToFile(appContext, "HttpClient", "Trying fallback query format $format: $altUrl")
+                            Log.d("HttpClient", "Trying fallback query format $format: $altUrl")
                             val altResponseJson = executeRequest(altUrl) ?: continue
-                            FileLogger.logToFile(appContext, "HttpClient", "Fallback format $format response: $altResponseJson")
+                            Log.d("HttpClient", "Fallback format $format response: $altResponseJson")
 
                             try {
                                 val altApiResponse = json.decodeFromString<ApiResponse>(altResponseJson)
                                 val altCode = altApiResponse.resultCode.toString().replace("\"", "")
                                 if (altCode == "0" && altApiResponse.result.isNotEmpty()) {
-                                    FileLogger.logToFile(appContext, "HttpClient", "Fallback format $format SUCCEEDED! Found ${altApiResponse.result.size} files.")
+                                    Log.i("HttpClient", "Fallback format $format SUCCEEDED! Found ${altApiResponse.result.size} files.")
                                     responseJson = altResponseJson
                                     apiResponse = altApiResponse
                                     code = altCode
@@ -497,7 +497,7 @@ class HttpClient(context: Context) {
                 
                 if (allFiles.isNotEmpty()) allFiles else null
             } catch (e: Exception) {
-                FileLogger.logToFile(appContext, "HttpClient", "Get file list error: ${e.message}")
+                Log.e("HttpClient", "Get file list error: ${e.message}")
                 e.printStackTrace()
                 null
             }
@@ -532,9 +532,9 @@ class HttpClient(context: Context) {
                     val sign = generateSignKey(queryPath + queryParams, token)
                     val url = "http://$dhcp/cgi-bin/$queryPath$queryParams&-signkey=$sign"
                     
-                    FileLogger.logToFile(appContext, "HttpClient", "Deleting remote file ($p): $url")
+                    Log.d("HttpClient", "Deleting remote file ($p): $url")
                     val responseJson = executeRequest(url)
-                    FileLogger.logToFile(appContext, "HttpClient", "Delete remote file response ($p): $responseJson")
+                    Log.d("HttpClient", "Delete remote file response ($p): $responseJson")
 
                     if (responseJson != null && (
                         responseJson.contains("\"ResultCode\":\"0\"") || 
@@ -547,7 +547,7 @@ class HttpClient(context: Context) {
 
                 false
             } catch (e: Exception) {
-                FileLogger.logToFile(appContext, "HttpClient", "Delete remote file error: ${e.message}")
+                Log.e("HttpClient", "Delete remote file error: ${e.message}")
                 e.printStackTrace()
                 false
             }
@@ -572,10 +572,10 @@ class HttpClient(context: Context) {
                 val url = "http://$dhcp/cgi-bin/$queryPath$queryParams&signkey=$sign"
                 val response = executeRequest(url)
                 
-                FileLogger.logToFile(appContext, "HttpClient", "Update FW response: $response")
+                Log.d("HttpClient", "Update FW response: $response")
                 response?.contains("\"ResultCode\":0") == true || response?.contains("\"ResultCode\":\"0\"") == true
             } catch (e: Exception) {
-                FileLogger.logToFile(appContext, "HttpClient", "Update FW error: ${e.message}")
+                Log.e("HttpClient", "Update FW error: ${e.message}")
                 e.printStackTrace()
                 false
             }
